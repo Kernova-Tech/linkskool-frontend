@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import DOMPurify from 'dompurify'
 
 import AppFooter from '@/components/AppFooter.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import type { Faqs } from '@/api/models'
 import { faqsService } from '@/api/services'
 import { usePageMeta } from '@/composables/usePageMeta'
+import { sanitizeHtml } from '@/utils/sanitizeHtml'
 
 const faqs = ref<Faqs[]>([])
 const isLoading = ref(false)
@@ -14,7 +14,7 @@ const loadError = ref('')
 const expandedFaqIds = ref<number[]>([])
 
 const sanitizeAnswerHtml = (answer: string) =>
-  DOMPurify.sanitize(answer, {
+  sanitizeHtml(answer, {
     USE_PROFILES: { html: true },
   })
 

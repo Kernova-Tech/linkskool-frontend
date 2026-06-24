@@ -5,7 +5,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-01-01',
   srcDir: 'src/',
 
-  modules: ['@nuxtjs/sitemap', '@pinia/nuxt'],
+  modules: ['@pinia/nuxt'],
 
   css: [
     '@fortawesome/fontawesome-free/css/all.css',
@@ -14,11 +14,6 @@ export default defineNuxtConfig({
 
   vite: {
     plugins: [tailwindcss()],
-  },
-
-  // Public site URL used by @nuxtjs/sitemap and canonical defaults
-  site: {
-    url: 'https://linkskool.com',
   },
 
   app: {
@@ -76,6 +71,12 @@ export default defineNuxtConfig({
   // Hybrid rendering: prerender static marketing/legal pages at build time,
   // stale-while-revalidate cache the dynamic news routes so crawlers always
   // receive fully-rendered HTML with correct per-page meta tags.
+  //
+  // News uses ISR (incremental static regeneration): each article renders
+  // on-demand on first request and is cached at the edge, then revalidated on
+  // the given interval. New articles appear automatically — no rebuild — which
+  // is essential because news is published continuously. The marketing/legal
+  // pages rarely change, so they are prerendered at deploy.
   routeRules: {
     '/': { prerender: true },
     '/about': { prerender: true },
@@ -83,8 +84,41 @@ export default defineNuxtConfig({
     '/faqs': { prerender: true },
     '/privacy-policy': { prerender: true },
     '/terms-of-use': { prerender: true },
-    '/news': { swr: 3600 },
-    '/news/**': { swr: 3600 },
+    '/news': { isr: 300 },
+    '/news/**': { isr: 3600 },
+    '/sitemap.xml': { isr: 3600 },
     '/updates': { redirect: '/news' },
+  },
+
+  nitro: {
+    prerender: {
+      // Don't crawl: interactive pages (programs/courses/enroll/payment) stay
+      // client-rendered. News is handled by ISR above, not prerendering.
+      crawlLinks: false,
+      failOnError: false,
+    },
+  },
+
+  hooks: {
+    // ONLY for fully static builds (`nuxt generate`, e.g. plain shared hosting):
+    // enumerate and prerender every news article. On Vercel/Node this is skipped
+    // because ISR/SWR renders news on demand without a rebuild.
+    async 'nitro:config'(nitroConfig) {
+      if (!nitroConfig.static) {
+        return
+      }
+
+      const { fetchAllNewsSlugs } = await import('./server/utils/fetchNewsSlugs')
+      const baseUrl = process.env.VITE_API_BASE_URL || 'https://linkskool.com/api/v4/public'
+      const slugs = await fetchAllNewsSlugs(baseUrl, process.env.VITE_API_KEY).catch(() => [])
+
+      nitroConfig.prerender ||= {}
+      nitroConfig.prerender.routes = [
+        ...(nitroConfig.prerender.routes || []),
+        '/news',
+        '/sitemap.xml',
+        ...slugs.map((slug) => `/news/${slug}`),
+      ]
+    },
   },
 })

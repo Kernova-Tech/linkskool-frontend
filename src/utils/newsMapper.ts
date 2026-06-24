@@ -1,7 +1,6 @@
-import DOMPurify from 'dompurify'
-
 import type { ApiNewsItem, ApiRelatedNewsItem } from '@/api/models/news'
 import type { NewsCard } from '@/data/news'
+import { sanitizeHtml } from '@/utils/sanitizeHtml'
 
 const defaultFallbackImage =
   'https://images.unsplash.com/photo-1523580846011-d3a5bc25702b?auto=format&fit=crop&w=1200&q=80'
@@ -149,7 +148,7 @@ const buildContentHtml = (content: string) => {
         .map((paragraph) => `<p>${linkifyPlainText(paragraph.trim()).replace(/\n/g, '<br>')}</p>`)
         .join('')
 
-  const sanitizedHtml = DOMPurify.sanitize(htmlContent, {
+  const sanitizedHtml = sanitizeHtml(htmlContent, {
     USE_PROFILES: { html: true },
     ADD_ATTR: ['target', 'rel'],
   })

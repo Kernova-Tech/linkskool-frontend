@@ -37,6 +37,16 @@ const shouldShowInlineAd = (index: number) => (index + 1) % 10 === 0
 <template>
   <section class="relative overflow-hidden bg-gray-50 pt-28 pb-20 text-slate-950">
     <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <header class="mb-8 max-w-3xl">
+        <h1 class="text-3xl font-black leading-tight text-slate-950 sm:text-4xl">
+          News, opportunities, and stories from LinkSkool
+        </h1>
+        <p class="mt-3 text-base leading-7 text-slate-600">
+          Announcements, career insights, technology notes, and community updates from across the
+          LinkSkool network.
+        </p>
+      </header>
+
       <AdSenseSlot :slot="adsenseConfig.slots.newsTop" />
 
       <div class="mt-8 flex flex-wrap justify-center gap-3 border-t border-gray-200 pt-6">

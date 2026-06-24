@@ -1,6 +1,7 @@
 Options -Indexes
 RewriteEngine On
 RewriteBase /
+ErrorDocument 404 /404.html
 
 # Force HTTPS (uncomment when deploying to production)
 # RewriteCond %{HTTPS} off
@@ -11,8 +12,12 @@ RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# Otherwise, send everything to index.html (for Vue SPA routing)
-RewriteRule ^ index.html [L]
+# Serve a prerendered page (e.g. /about -> /about/index.html, /news/<slug>)
+RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI}/index.html -f
+RewriteRule ^(.+?)/?$ /$1/index.html [L]
+
+# Otherwise fall back to the SPA shell (client-rendered routes: programs, courses, etc.)
+RewriteRule ^ /200.html [L]
 
 # php -- BEGIN cPanel-generated handler, do not edit
 # Set the “ea-php82” package as the default “PHP” programming language.

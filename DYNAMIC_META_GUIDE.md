@@ -1,323 +1,87 @@
-# Dynamic Meta Tags & Direct URL Access - Implementation Guide
+# SEO, Meta Tags & Deployment Guide
 
-## ✅ What Was Implemented
+> **Updated 2026-06-24.** The app moved from a client-only Vue SPA to **Nuxt 4**.
+> Previously, meta tags were set with JavaScript at runtime — but social scrapers
+> (WhatsApp, Facebook, X, LinkedIn) and many crawlers don't run JavaScript, so
+> every shared link previewed as the homepage. Now pages are **rendered to HTML
+> on the server / at build time**, so the correct title, description, and image
+> are in the raw HTML that scrapers read.
 
-### 1. **Direct URL Access (Independent Page Loading)**
+## How meta tags work now
 
-All pages now fetch their own data based on URL parameters:
+- `usePageMeta()` (unchanged call signature) wraps Nuxt's `useHead` / `useSeoMeta`,
+  so titles, description, canonical, Open Graph, and Twitter tags are rendered
+  into the server HTML. Static pages get static meta; news pages get per-article
+  meta driven by `useAsyncData` (which runs on the server).
+- News article pages also emit **`NewsArticle` JSON-LD** for rich results.
+- Each page sets its own `<link rel="canonical">`.
 
-- **Landing Page** (`/`)
-  - Loads program list independently
-- **Program Page** (`/programs/:programSlug`)
-  - Uses `programSlug` from URL to fetch program + courses
-  - Works independently: `https://linkskool.com/programs/web-development`
-- **Course Detail Page** (`/courses/:courseId`)
-  - Uses `courseId` from URL to fetch course details
-  - Works independently: `https://linkskool.com/courses/123`
-- **Program Enrollment** (`/programs/:programSlug/enroll`)
-  - Uses `programSlug` from URL to fetch enrollment data
-  - Works independently: `https://linkskool.com/programs/web-development/enroll`
+## Build & deploy (Vercel — current setup)
 
-✅ **You can now copy any URL and share it directly** - the page will load its own data.
+News is published continuously, so it must render **on request, not at build time**.
+The app deploys to Vercel with **ISR** (incremental static regeneration):
 
----
+- Marketing/legal pages: prerendered at deploy.
+- `/news` and `/news/<slug>`: rendered on first request, cached at the edge, and
+  revalidated automatically (`routeRules` in `nuxt.config.ts`: 5 min for the index,
+  1 hour per article). **New articles appear with no rebuild.**
+- `/sitemap.xml`: ISR, regenerated hourly from the live article list.
+- `/programs/*`, `/courses/*`, enrolment, payment: client-rendered (no scraping needed).
 
-### 2. **Dynamic Meta Tags for Social Sharing**
+### Steps
 
-Created `usePageMeta` composable that dynamically updates:
+1. Push the repo to GitHub and import it in Vercel (framework auto-detected as Nuxt).
+   Build command `npm run build`, output handled automatically.
+2. In **Vercel → Settings → Environment Variables**, add the `VITE_*` values from
+   `.env.production` (`VITE_API_BASE_URL`, `VITE_API_KEY`, `VITE_ASSET_BASE_URL`,
+   AdSense / WhatsApp / app-store vars, etc.). `.env.production` is gitignored, so
+   Vercel reads these from the dashboard, not the file.
+3. Point `linkskool.com` DNS to Vercel.
 
-- `<title>` tag
-- `<meta name="description">`
-- `<meta name="keywords">`
-- Open Graph tags (`og:title`, `og:description`, `og:image`, `og:url`)
-- Twitter Card tags (`twitter:title`, `twitter:description`, `twitter:image`)
+### The API (important — it currently lives at linkskool.com/api)
 
-**Implemented on all pages:**
+Once `linkskool.com` points to Vercel, the cPanel-hosted API must be reachable on a
+host that is **not** behind Vercel. Recommended:
 
-| Page       | Title Format                                                 | Description Source                         |
-| ---------- | ------------------------------------------------------------ | ------------------------------------------ |
-| Landing    | "Linkskool - Your Gateway to Learning and Skill Development" | Static                                     |
-| Program    | "[Program Name] \| Learn with Linkskool"                     | `program.name` + `program.description`     |
-| Course     | "[Course Name] - Professional Course \| Linkskool"           | `course.courseName` + `course.description` |
-| Enrollment | "Enroll in [Program Name] \| Linkskool"                      | `program.name` + `program.description`     |
+- Create subdomain **`api.linkskool.com`** in cPanel (serves the existing API).
+- Enable CORS on the API: `Access-Control-Allow-Origin: https://linkskool.com`
+  (and answer `OPTIONS` preflight).
+- Set `VITE_API_BASE_URL=https://api.linkskool.com/v4/public/` in Vercel.
 
----
+Alternative (no CORS): proxy `/api/*` from Vercel to the cPanel origin via
+`vercel.json` rewrites — but that still needs a non-Vercel origin hostname.
 
-## 🧪 How to Test
+## Build & deploy (plain shared hosting — fallback, news needs rebuilds)
 
-### Test 1: Direct URL Access
+If you ever go back to static hosting: `npm run generate:local` prerenders every
+page (including all news articles) into `.output/public/` for upload to `public_html`
+(includes `200.html` SPA fallback + `.htaccess`). Downside: news only updates on
+rebuild, so this isn't suitable for a live news feed.
 
-1. **Without being on homepage**, open browser and go directly to:
-   ```
-   http://localhost:5173/programs/web-development
-   ```
-2. **Expected Result:** Page loads correctly with program data
-3. **Try enrollment page directly:**
-   ```
-   http://localhost:5173/programs/web-development/enroll
-   ```
-4. **Expected Result:** Enrollment page loads with course selection
+## Environment
 
-### Test 2: Dynamic Page Titles
+Nuxt only auto-loads `.env` (dev backend). For local production builds use
+`npm run build:local` / `npm run generate:local` (they pass `--dotenv .env.production`).
+On Vercel the `VITE_*` vars come from the dashboard. The app reads config through
+`import.meta.env.VITE_*` (`src/api/config.ts`).
 
-1. Start dev server: `npm run dev`
-2. Open browser DevTools Console
-3. Navigate to different pages and run:
-   ```javascript
-   document.title
-   ```
-4. **Expected Results:**
-   - Landing: "Linkskool - Your Gateway to Learning and Skill Development"
-   - Program: "Web Development | Learn with Linkskool"
-   - Course: "Introduction to React - Professional Course | Linkskool"
-   - Enrollment: "Enroll in Web Development | Linkskool"
+## Sitemap
 
-### Test 3: Social Media Meta Tags
+`/sitemap.xml` is produced by `server/routes/sitemap.xml.ts`, which pulls every
+news slug from the API (`server/utils/fetchNewsSlugs.ts`) plus the static routes.
+It is prerendered at build, so the deployed `sitemap.xml` is a plain file.
 
-1. Navigate to any page (program/course)
-2. Open DevTools Console and run:
+## Verify after deploy
 
-   ```javascript
-   // Check Open Graph title
-   document.querySelector('meta[property="og:title"]')?.content
+Test real URLs (not localhost) in:
 
-   // Check Open Graph description
-   document.querySelector('meta[property="og:description"]')?.content
+- Facebook Sharing Debugger — https://developers.facebook.com/tools/debug/
+- X/Twitter Card Validator
+- LinkedIn Post Inspector — https://www.linkedin.com/post-inspector/
+- Google Search Console (submit `https://linkskool.com/sitemap.xml`)
 
-   // Check Open Graph URL
-   document.querySelector('meta[property="og:url"]')?.content
-
-   // Check Twitter title
-   document.querySelector('meta[name="twitter:title"]')?.content
-   ```
-
-3. **Expected Result:** Each meta tag shows page-specific content
-
-### Test 4: Social Media Preview Testing
-
-Use these tools to test how your pages appear when shared:
-
-1. **Facebook Sharing Debugger**
-
-   ```
-   https://developers.facebook.com/tools/debug/
-   ```
-
-   - Paste your page URL (e.g., `https://linkskool.com/programs/web-development`)
-   - Click "Debug" to see preview
-
-2. **Twitter Card Validator**
-
-   ```
-   https://cards-dev.twitter.com/validator
-   ```
-
-   - Paste your page URL
-   - See how it appears on Twitter
-
-3. **LinkedIn Post Inspector**
-   ```
-   https://www.linkedin.com/post-inspector/
-   ```
-
-   - Inspect how links appear on LinkedIn
-
-### Test 5: Shareable Links
-
-1. Navigate to a program enrollment page
-2. Copy the URL from address bar:
-   ```
-   http://localhost:5173/programs/data-science/enroll
-   ```
-3. Open **new incognito window** (to simulate fresh user)
-4. Paste the URL directly
-5. **Expected Result:** Page loads correctly with all data
-
----
-
-## 📋 Technical Implementation Details
-
-### File Structure
-
-```
-src/
-├── composables/
-│   └── usePageMeta.ts       # Meta tag management composable
-├── views/
-│   ├── LandingPage.vue      # Static meta tags
-│   ├── ProgramPage.vue      # Dynamic meta (program data)
-│   ├── CourseDetailPage.vue # Dynamic meta (course data)
-│   └── ProgramEnrollmentPage.vue # Dynamic meta (enrollment data)
-```
-
-### How It Works
-
-**1. usePageMeta Composable:**
-
-```typescript
-usePageMeta(() => ({
-  title: program.value ? `${program.value.name} | Learn with Linkskool` : 'Program | Linkskool',
-  description: program.value?.description || 'Default...',
-  url: `https://linkskool.com/programs/${programRef.value}`,
-  // ... more meta tags
-}))
-```
-
-**2. Reactive Updates:**
-
-- When `program.value` changes (after API fetch), meta tags auto-update
-- Uses Vue's `watch()` to track changes in reactive data
-- Automatically cleans up on component unmount
-
-**3. SEO Benefits:**
-
-- ✅ Unique page titles for better Google rankings
-- ✅ Proper Open Graph for Facebook/LinkedIn shares
-- ✅ Twitter Card support for Twitter shares
-- ✅ Dynamic descriptions improve click-through rates
-
----
-
-## 🚀 Production Deployment Checklist
-
-Before deploying to production:
-
-### 1. Update OG Image
-
-- [ ] Create 1200x630px branded image
-- [ ] Save to `public/assets/og-image.png`
-- [ ] Or update URLs in composable calls to use course/program images
-
-### 2. Update Base URLs
-
-Replace all instances of `https://linkskool.com` with your actual domain:
+Or check the raw HTML directly (this is what scrapers see):
 
 ```bash
-# Search for hardcoded URLs
-grep -r "linkskool.com" src/
+curl -s https://linkskool.com/news/<slug> | grep -i 'og:title\|og:image\|<title>'
 ```
-
-### 3. Test with Real API Data
-
-- [ ] Ensure API returns proper `description` fields
-- [ ] Verify `imageUrl` fields are populated
-- [ ] Test with long and short program/course names
-
-### 4. Server Configuration (SPA Mode)
-
-Since this is a Vue SPA, configure your server to handle direct URLs:
-
-**Nginx:**
-
-```nginx
-location / {
-  try_files $uri $uri/ /index.html;
-}
-```
-
-**Apache (.htaccess):**
-
-```apache
-<IfModule mod_rewrite.c>
-  RewriteEngine On
-  RewriteBase /
-  RewriteRule ^index\.html$ - [L]
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule . /index.html [L]
-</IfModule>
-```
-
-**Vercel (vercel.json):**
-
-```json
-{
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
-}
-```
-
-### 5. Monitor Social Shares
-
-After deployment:
-
-- [ ] Test Facebook sharing with real URL
-- [ ] Test Twitter card preview
-- [ ] Test LinkedIn post preview
-- [ ] Verify Google Search Console indexing
-
----
-
-## 🐛 Troubleshooting
-
-### Issue: Page shows default title instead of dynamic title
-
-**Cause:** Data hasn't loaded yet
-**Solution:** Check if API is returning data correctly
-
-### Issue: Meta tags not updating on navigation
-
-**Cause:** Composable might not be watching reactive data
-**Solution:** Ensure you're passing a function to `usePageMeta()` for dynamic data:
-
-```typescript
-// ✅ Correct (reactive)
-usePageMeta(() => ({ title: program.value?.name }))
-
-// ❌ Wrong (static snapshot)
-usePageMeta({ title: program.value?.name })
-```
-
-### Issue: Direct URL shows 404 in production
-
-**Cause:** Server not configured for SPA routing
-**Solution:** Add server rewrite rules (see Server Configuration above)
-
-### Issue: Social preview shows old data
-
-**Cause:** Facebook/Twitter cache old meta tags
-**Solution:** Use debugging tools to force refresh:
-
-- Facebook: https://developers.facebook.com/tools/debug/
-- Twitter: Delete tweet and reshare
-
----
-
-## ✅ Success Criteria
-
-Your implementation is working correctly when:
-
-1. ✅ Any page URL can be opened directly in fresh browser tab
-2. ✅ Each page shows unique title in browser tab
-3. ✅ Sharing on Facebook shows page-specific image and description
-4. ✅ Sharing on Twitter shows correct card preview
-5. ✅ Google Search shows unique titles and descriptions per page
-6. ✅ No 404 errors when accessing direct URLs in production
-
----
-
-## 📊 Expected Results
-
-### Before Implementation
-
-- ❌ All pages showed "Linkskool" title
-- ❌ Generic description for all pages
-- ❌ Same OG image for all pages
-- ❌ Direct URLs might fail if data not in state
-
-### After Implementation
-
-- ✅ Unique titles per page type
-- ✅ Dynamic descriptions from API data
-- ✅ Page-specific OG URLs
-- ✅ All pages work independently via direct URL
-- ✅ Shareable links work for every page
-- ✅ SEO-friendly meta tags for better ranking
-
----
-
-## 📚 Additional Resources
-
-- [Open Graph Protocol](https://ogp.me/)
-- [Twitter Card Documentation](https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/abouts-cards)
-- [Vue Router Hash vs History Mode](https://router.vuejs.org/guide/essentials/history-mode.html)
-- [Facebook Sharing Debugger](https://developers.facebook.com/tools/debug/)

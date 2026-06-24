@@ -6,6 +6,14 @@ import { usePageMeta } from '@/composables/usePageMeta'
 
 const router = useRouter()
 
+// Return a real 404 HTTP status (not a soft 200) when server-rendered.
+if (import.meta.server) {
+  const event = useRequestEvent()
+  if (event) {
+    setResponseStatus(event, 404)
+  }
+}
+
 // Set meta tags for 404 page
 usePageMeta({
     title: '404 - Page Not Found | Linkskool',
