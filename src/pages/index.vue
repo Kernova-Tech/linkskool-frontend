@@ -10,9 +10,9 @@ import { usePageMeta } from '@/composables/usePageMeta'
 
 // Set page meta tags for SEO and social sharing
 usePageMeta({
-  title: 'Linkskool - Your Gateway to Learning and Skill Development',
-  description: 'Discover expert-curated courses and programs designed to advance your skills. Learn from industry professionals and enroll in programs that matter.',
-  keywords: 'online courses, skill development, learning programs, professional development, Nigeria education platform',
+  title: 'Linkskool — Education Technology for Learning, Assessment & School Data',
+  description: 'One connected platform for learning, assessments, school management, and education data across Africa. Built for schools, institutions, and learners.',
+  keywords: 'education technology, learning management system, CBT, school management software, education data, Africa edtech, online courses',
   url: 'https://linkskool.com',
   image: 'https://linkskool.com/assets/og-image.png',
   type: 'website',

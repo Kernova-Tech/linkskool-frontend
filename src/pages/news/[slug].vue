@@ -28,6 +28,35 @@ usePageMeta(() => ({
   image: article.value?.imageUrl ?? 'https://linkskool.com/assets/og-image.png',
   type: 'article',
 }))
+
+// NewsArticle structured data so search engines can render rich news results.
+useHead(() => ({
+  script: article.value
+    ? [
+        {
+          type: 'application/ld+json',
+          innerHTML: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'NewsArticle',
+            headline: article.value.title,
+            description: article.value.summary,
+            image: article.value.imageUrl ? [article.value.imageUrl] : undefined,
+            articleSection: article.value.category,
+            author: { '@type': 'Organization', name: article.value.source || 'Linkskool' },
+            publisher: {
+              '@type': 'Organization',
+              name: 'Linkskool',
+              logo: { '@type': 'ImageObject', url: 'https://linkskool.com/assets/og-image.png' },
+            },
+            mainEntityOfPage: {
+              '@type': 'WebPage',
+              '@id': `https://linkskool.com/news/${article.value.slug}`,
+            },
+          }),
+        },
+      ]
+    : [],
+}))
 </script>
 
 <template>

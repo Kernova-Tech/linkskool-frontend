@@ -4,8 +4,6 @@
 User-agent: *
 Allow: /
 Disallow: /api/
-Disallow: /*.json$
-Disallow: /*.xml$
 Disallow: /admin/
 Disallow: /private/
 
