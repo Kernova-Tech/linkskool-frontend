@@ -102,6 +102,12 @@ const router = createRouter({
       component: ResetPasswordPage,
     },
     {
+      // Shared forms. Loaded on demand: most visitors never open one.
+      path: '/f/:token([A-Za-z0-9]{10})',
+      name: 'form',
+      component: () => import('@/views/FormPage.vue'),
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: NotFoundPage,
