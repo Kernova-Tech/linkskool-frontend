@@ -6,6 +6,7 @@ import { ApiError } from '@/api/client'
 import type { FormAnswers, FormField, PublicForm } from '@/api/models'
 import { formService } from '@/api/services'
 import FormFieldInput from '@/components/form/FormFieldInput.vue'
+import { siteLinks } from '@/config/site'
 import { FILE_KINDS } from '@/components/form/fileKinds'
 
 /**
@@ -341,7 +342,7 @@ onUnmounted(() => {
         <p>Never share passwords or bank details through a form.</p>
         <p>
           This form was shared through
-          <RouterLink to="/" class="font-display text-sm font-semibold text-slate-600 hover:text-brand">Linkskool</RouterLink>
+          <a :href="siteLinks.site" class="font-display text-sm font-semibold text-slate-600 hover:text-brand">Linkskool</a>
         </p>
       </footer>
     </main>

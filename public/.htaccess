@@ -12,6 +12,13 @@ RewriteBase /
 RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|Facebot|Twitterbot|WhatsApp|LinkedInBot|Slackbot|TelegramBot|Discordbot|Pinterest|redditbot) [NC]
 RewriteRule ^news/([^/]+)/?$ https://linkskool.net/api/v4/public/news/$1/share [R=302,L]
 
+# forms.linkskool.com serves the same build, for forms only: the app claims
+# every linkskool.com link, so forms live on a host it does not. Anything else
+# asked of it goes to the main site, so the site is never served twice.
+RewriteCond %{HTTP_HOST} ^forms\.linkskool\.com$ [NC]
+RewriteCond %{REQUEST_URI} !^/(f/|assets/|favicon\.ico$|logo\.svg$|linkskool-banner-logo\.png$|index\.html$)
+RewriteRule ^ https://linkskool.com%{REQUEST_URI} [R=301,L]
+
 # Shared forms preview with the form's own title, description and banner.
 RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|Facebot|Twitterbot|WhatsApp|LinkedInBot|Slackbot|TelegramBot|Discordbot|Pinterest|redditbot) [NC]
 RewriteRule ^f/([A-Za-z0-9]{10})/?$ https://linkskool.net/api/v4/public/forms/$1/share [R=302,L]
