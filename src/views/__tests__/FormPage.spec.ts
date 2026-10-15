@@ -12,7 +12,7 @@ const { default: FormPage } = await import('../FormPage.vue')
 
 const form: PublicForm = {
   title: 'Holiday camp',
-  description: '<p>Register your <strong>child</strong>.</p><ul><li>Ages 10 to 14</li></ul><p><a href="https://example.com">Camp details</a><script>alert(1)</script><img src=x onerror="alert(1)"></p>',
+  description: '<p>Register your <strong>child</strong>.</p><p></p><ul><li>Ages 10 to 14</li></ul><p><a href="https://example.com">Camp details</a><script>alert(1)</script><img src=x onerror="alert(1)"></p>',
   bannerUrl: null,
   logos: ['https://api.test/logo-a.png', 'https://api.test/logo-b.png'],
   accepting: true,
@@ -60,6 +60,8 @@ describe('FormPage', () => {
     expect(description.find('a').attributes()).toMatchObject({ href: 'https://example.com', target: '_blank' })
     expect(description.html()).not.toContain('script')
     expect(description.find('img').exists()).toBe(false)
+    // A blank line left in the editor stays a blank line.
+    expect(description.findAll('p').some((p) => p.element.innerHTML === '')).toBe(true)
     expect(w.findAll('img[alt^="Partner logo"]')).toHaveLength(2)
     expect(w.text()).toContain('* Indicates required question')
     expect(w.findAll('input[type="radio"]')).toHaveLength(2)
