@@ -45,7 +45,9 @@ export async function apiRequest<T = unknown>(
 
     if (body !== undefined) {
         if (body instanceof FormData) {
-            requestInit.body = toSnake(body);
+            // Sent as is: renaming keys would turn it into a plain object, and
+            // the browser must set the multipart boundary in Content-Type itself.
+            requestInit.body = body;
         } else if (typeof body === 'object') {
             if (!headers.has('Content-Type')) {
                 headers.set('Content-Type', 'application/json');

@@ -10,6 +10,7 @@ export type FormFieldType =
   | 'dropdown'
   | 'radio'
   | 'checkboxes'
+  | 'file'
   | 'section'
 
 export interface FormField {
@@ -19,13 +20,17 @@ export interface FormField {
   help: string | null
   required: boolean
   options?: { id: string; label: string }[]
+  /** File questions: what kind of file, and the largest in MB. */
+  accept?: 'documents' | 'images' | 'any'
+  maxMb?: number
 }
 
 export interface PublicForm {
   title: string
   description: string | null
-  logoUrl: string | null
   bannerUrl: string | null
+  /** Partners' logos, in order. */
+  logos: string[]
   /** False once closed, past its date or full; then there are no fields. */
   accepting: boolean
   closedMessage: string | null

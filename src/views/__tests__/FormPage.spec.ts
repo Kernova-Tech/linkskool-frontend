@@ -13,8 +13,8 @@ const { default: FormPage } = await import('../FormPage.vue')
 const form: PublicForm = {
   title: 'Holiday camp',
   description: 'Register your child.',
-  logoUrl: null,
   bannerUrl: null,
+  logos: ['https://api.test/logo-a.png', 'https://api.test/logo-b.png'],
   accepting: true,
   closedMessage: null,
   collectEmail: true,
@@ -42,6 +42,8 @@ describe('FormPage', () => {
     get.mockReset()
     submit.mockReset()
     window.scrollTo = vi.fn()
+    // jsdom has no layout; the page scrolls to the first mistake.
+    Element.prototype.scrollIntoView = vi.fn()
   })
 
   it('draws every field and keeps the page out of search engines', async () => {
@@ -51,6 +53,8 @@ describe('FormPage', () => {
     expect(get).toHaveBeenCalledWith('aFzhvB9qgT')
     expect(w.text()).toContain('Holiday camp')
     expect(w.text()).toContain('About the class')
+    expect(w.findAll('img[alt^="Partner logo"]')).toHaveLength(2)
+    expect(w.text()).toContain('* Indicates required question')
     expect(w.findAll('input[type="radio"]')).toHaveLength(2)
     expect(w.findAll('input[type="checkbox"]')).toHaveLength(2)
     expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex, nofollow')
@@ -66,8 +70,8 @@ describe('FormPage', () => {
     await w.find('form').trigger('submit')
 
     expect(submit).not.toHaveBeenCalled()
-    expect(w.text()).toContain('Enter your email address.')
-    expect(w.text()).toContain('This question needs an answer.')
+    expect(w.text()).toContain('Enter a valid email address.')
+    expect(w.text()).toContain('This is a required question.')
     expect(w.text()).toContain('Enter a valid phone number.')
     w.unmount()
   })
@@ -85,7 +89,7 @@ describe('FormPage', () => {
     await w.find('form').trigger('submit')
     await flushPromises()
 
-    expect(submit).toHaveBeenCalledWith('aFzhvB9qgT', { name1: 'Ada', cls1: 'o2', days: ['mo', 'tu'] }, 'parent@example.com', '')
+    expect(submit).toHaveBeenCalledWith('aFzhvB9qgT', { name1: 'Ada', cls1: 'o2', days: ['mo', 'tu'] }, 'parent@example.com', '', {})
     expect(w.text()).toContain('See you at camp!')
     // One response per email: no second response offered.
     expect(w.text()).not.toContain('Send another response')
@@ -115,7 +119,44 @@ describe('FormPage', () => {
 
     get.mockRejectedValue(new ApiError('Not found', 404))
     w = await render('zzzzzzzzzz')
-    expect(w.text()).toContain('We could not find this form')
+    expect(w.text()).toContain('This form could not be found')
+    w.unmount()
+  })
+
+  it('checks a file before sending and sends it with the answers', async () => {
+    get.mockResolvedValue({
+      ...form,
+      collectEmail: false,
+      onePerEmail: false,
+      fields: [{ id: 'cv01', type: 'file', label: 'CV', help: null, required: true, accept: 'documents', maxMb: 1 }],
+    })
+    submit.mockResolvedValue({ message: 'Thanks' })
+    const w = await render()
+    const input = w.find('#field-cv01')
+    const attach = async (file: File) => {
+      Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+      await input.trigger('change')
+    }
+
+    expect(input.attributes('accept')).toBe('.pdf,.doc,.docx,.odt,.rtf,.txt')
+    await w.find('form').trigger('submit')
+    expect(w.text()).toContain('This question needs a file.')
+
+    await attach(new File(['x'], 'photo.png'))
+    await w.find('form').trigger('submit')
+    expect(w.text()).toContain('Choose a PDF, Word or text file.')
+
+    await attach(new File([new Uint8Array(2 * 1048576)], 'big.pdf'))
+    await w.find('form').trigger('submit')
+    expect(w.text()).toContain('This file is too large. The limit is 1 MB.')
+    expect(submit).not.toHaveBeenCalled()
+
+    const cv = new File(['%PDF'], 'Ada CV.pdf')
+    await attach(cv)
+    expect(w.text()).toContain('Ada CV.pdf')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(submit).toHaveBeenCalledWith('aFzhvB9qgT', {}, '', '', { cv01: cv })
     w.unmount()
   })
 })

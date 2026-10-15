@@ -6,13 +6,24 @@ export const formService = {
         return (await apiRequest<PublicForm>(`forms/${encodeURIComponent(token)}`, { signal })).data;
     },
 
-    /** `website` is a field people never see; it stays empty for them and only bots fill it. */
-    async submit(token: string, answers: FormAnswers, email: string, website: string) {
-        return (
-            await apiRequest<{ message: string }>(`forms/${encodeURIComponent(token)}/responses`, {
-                method: "POST",
-                body: { answers, email, website },
-            })
-        ).data;
+    /**
+     * `website` is a field people never see; it stays empty for them and only
+     * bots fill it. With files, the response goes as multipart: the answers as
+     * JSON, each file as file_{question id}.
+     */
+    async submit(token: string, answers: FormAnswers, email: string, website: string, files: Record<string, File> = {}) {
+        const path = `forms/${encodeURIComponent(token)}/responses`;
+        if (Object.keys(files).length === 0) {
+            return (await apiRequest<{ message: string }>(path, { method: "POST", body: { answers, email, website } })).data;
+        }
+
+        const body = new FormData();
+        body.append("answers", JSON.stringify(answers));
+        body.append("email", email);
+        body.append("website", website);
+        for (const [fieldId, file] of Object.entries(files)) {
+            body.append(`file_${fieldId}`, file, file.name);
+        }
+        return (await apiRequest<{ message: string }>(path, { method: "POST", body })).data;
     },
 };

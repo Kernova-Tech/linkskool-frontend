@@ -12,6 +12,10 @@ RewriteBase /
 RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|Facebot|Twitterbot|WhatsApp|LinkedInBot|Slackbot|TelegramBot|Discordbot|Pinterest|redditbot) [NC]
 RewriteRule ^news/([^/]+)/?$ https://linkskool.net/api/v4/public/news/$1/share [R=302,L]
 
+# Shared forms preview with the form's own title, description and banner.
+RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|Facebot|Twitterbot|WhatsApp|LinkedInBot|Slackbot|TelegramBot|Discordbot|Pinterest|redditbot) [NC]
+RewriteRule ^f/([A-Za-z0-9]{10})/?$ https://linkskool.net/api/v4/public/forms/$1/share [R=302,L]
+
 # If the request is for an existing file or directory, serve it directly
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
