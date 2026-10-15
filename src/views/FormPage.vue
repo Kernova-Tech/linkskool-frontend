@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import DOMPurify from 'dompurify'
 import { useRoute } from 'vue-router'
 import { ApiError } from '@/api/client'
 import type { FormAnswers, FormField, PublicForm } from '@/api/models'
@@ -26,6 +27,32 @@ const submitError = ref('')
 const sentMessage = ref('')
 const sending = ref(false)
 const confirmingClear = ref(false)
+
+/**
+ * The description is rich text from the team's editor. The API cleans it on
+ * save; it is cleaned again here, and links open in a new tab. Plain text from
+ * before keeps its line breaks.
+ */
+const descriptionHtml = computed(() => {
+  const raw = form.value?.description?.trim()
+  if (!raw) return ''
+  const html = /<[a-z][\s\S]*>/i.test(raw)
+    ? raw
+    : raw
+        .split(/\n{2,}/)
+        .map((p) => `<p>${p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>`)
+        .join('')
+  const clean = DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'a', 'ul', 'ol', 'li', 'h2', 'h3', 'blockquote', 'span'],
+    ALLOWED_ATTR: ['href', 'target', 'rel'],
+  })
+  const doc = new DOMParser().parseFromString(clean, 'text/html')
+  doc.querySelectorAll('a').forEach((a) => {
+    a.setAttribute('target', '_blank')
+    a.setAttribute('rel', 'noopener noreferrer nofollow')
+  })
+  return doc.body.innerHTML
+})
 
 const questions = computed(() => form.value?.fields.filter((f) => f.type !== 'section') ?? [])
 const hasRequired = computed(() => form.value?.collectEmail || questions.value.some((q) => q.required))
@@ -197,9 +224,12 @@ onUnmounted(() => {
               />
             </div>
             <h1 class="font-display text-[26px] font-semibold leading-tight text-slate-900 sm:text-[30px]">{{ form.title }}</h1>
-            <p v-if="form.description && state !== 'sent'" class="mt-3 whitespace-pre-line text-[15px] leading-relaxed text-slate-700">
-              {{ form.description }}
-            </p>
+            <!-- eslint-disable-next-line vue/no-v-html -- cleaned twice: by the API, and by DOMPurify here -->
+            <div
+              v-if="descriptionHtml && state !== 'sent'"
+              class="mt-3 text-[15px] leading-relaxed text-slate-700 [&_a]:font-medium [&_a]:text-brand [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-brand-ink [&_blockquote]:border-l-4 [&_blockquote]:border-slate-200 [&_blockquote]:pl-3 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-slate-900 [&_h3]:mt-3 [&_h3]:font-semibold [&_h3]:text-slate-900 [&_li]:mt-1 [&_ol]:ml-5 [&_ol]:list-decimal [&_p]:mb-3 [&_p:last-child]:mb-0 [&_p:empty]:hidden [&_strong]:font-semibold [&_strong]:text-slate-900 [&_ul]:mb-3 [&_ul]:ml-5 [&_ul]:list-disc"
+              v-html="descriptionHtml"
+            ></div>
           </div>
 
           <div v-if="state === 'sent'" class="border-t border-slate-200 px-6 py-6" role="status">

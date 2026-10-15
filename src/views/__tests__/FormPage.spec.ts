@@ -12,7 +12,7 @@ const { default: FormPage } = await import('../FormPage.vue')
 
 const form: PublicForm = {
   title: 'Holiday camp',
-  description: 'Register your child.',
+  description: '<p>Register your <strong>child</strong>.</p><ul><li>Ages 10 to 14</li></ul><p><a href="https://example.com">Camp details</a><script>alert(1)</script><img src=x onerror="alert(1)"></p>',
   bannerUrl: null,
   logos: ['https://api.test/logo-a.png', 'https://api.test/logo-b.png'],
   accepting: true,
@@ -53,6 +53,13 @@ describe('FormPage', () => {
     expect(get).toHaveBeenCalledWith('aFzhvB9qgT')
     expect(w.text()).toContain('Holiday camp')
     expect(w.text()).toContain('About the class')
+    // The description is shown formatted, with anything unsafe gone.
+    const description = w.find('header div.leading-relaxed')
+    expect(description.find('strong').text()).toBe('child')
+    expect(description.find('li').text()).toBe('Ages 10 to 14')
+    expect(description.find('a').attributes()).toMatchObject({ href: 'https://example.com', target: '_blank' })
+    expect(description.html()).not.toContain('script')
+    expect(description.find('img').exists()).toBe(false)
     expect(w.findAll('img[alt^="Partner logo"]')).toHaveLength(2)
     expect(w.text()).toContain('* Indicates required question')
     expect(w.findAll('input[type="radio"]')).toHaveLength(2)
