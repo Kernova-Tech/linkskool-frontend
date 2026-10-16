@@ -11,6 +11,7 @@ vi.mock('@/api/services', () => ({ formService: { get: (...a: unknown[]) => get(
 const { default: FormPage } = await import('../FormPage.vue')
 
 const form: PublicForm = {
+  type: 'standard',
   title: 'Holiday camp',
   description: '<p>Register your <strong>child</strong>.</p><p></p><ul><li>Ages 10 to 14</li></ul><p><a href="https://example.com">Camp details</a><script>alert(1)</script><img src=x onerror="alert(1)"></p>',
   bannerUrl: null,
@@ -19,6 +20,7 @@ const form: PublicForm = {
   closedMessage: null,
   collectEmail: true,
   onePerEmail: true,
+  requireSignIn: false,
   fields: [
     { id: 'name1', type: 'short_text', label: 'Child’s name', help: null, required: true },
     { id: 'sec1', type: 'section', label: 'About the class', help: null, required: false },
