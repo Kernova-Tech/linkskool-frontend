@@ -3,9 +3,10 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import DOMPurify from 'dompurify'
 import { useRoute } from 'vue-router'
 import { ApiError } from '@/api/client'
-import type { FormAnswers, FormField, FormNextAction, PublicForm } from '@/api/models'
+import type { FormAnswers, FormField, FormNextAction, FormSession, PublicForm } from '@/api/models'
 import { formService } from '@/api/services'
 import FormFieldInput from '@/components/form/FormFieldInput.vue'
+import GoogleSignInButton from '@/components/form/GoogleSignInButton.vue'
 import { siteLinks } from '@/config/site'
 import { FILE_KINDS } from '@/components/form/fileKinds'
 
@@ -29,6 +30,46 @@ const sentMessage = ref('')
 const sending = ref(false)
 const confirmingClear = ref(false)
 const nextAction = ref<FormNextAction | null>(null)
+
+/** For a sign-in form: who is signed in, kept for this visit only. */
+const SESSION_KEY = 'linkskool-form-session'
+const readSession = (): FormSession | null => {
+  try {
+    return JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? 'null')
+  } catch {
+    return null
+  }
+}
+const session = ref<FormSession | null>(readSession())
+const signingIn = ref(false)
+const signInError = ref('')
+const needsSignIn = computed(() => !!form.value?.requireSignIn && !session.value)
+
+const signIn = async (idToken: string) => {
+  signingIn.value = true
+  signInError.value = ''
+  try {
+    session.value = await formService.signIn(idToken)
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session.value))
+    } catch {
+      // Kept in memory for this page.
+    }
+  } catch (e) {
+    signInError.value = e instanceof Error && e.message ? e.message : 'We could not sign you in. Please try again.'
+  } finally {
+    signingIn.value = false
+  }
+}
+
+const signOut = () => {
+  session.value = null
+  try {
+    sessionStorage.removeItem(SESSION_KEY)
+  } catch {
+    // Nothing kept.
+  }
+}
 const showFullDescription = ref(false)
 
 /** Long enough to be cut to three lines; then See more shows. */
@@ -90,7 +131,9 @@ const check = (field: FormField): string => {
 
 const validate = () => {
   for (const key of Object.keys(errors)) delete errors[key]
-  if (form.value?.collectEmail && !EMAIL.test(email.value.trim())) errors.email = 'Enter a valid email address.'
+  if (form.value?.collectEmail && !form.value.requireSignIn && !EMAIL.test(email.value.trim())) {
+    errors.email = 'Enter a valid email address.'
+  }
   for (const field of questions.value) {
     const message = check(field)
     if (message) errors[field.id] = message
@@ -113,7 +156,14 @@ const submit = async () => {
   const attached = Object.fromEntries(Object.entries(files).filter((e): e is [string, File] => e[1] instanceof File))
   sending.value = true
   try {
-    const result = await formService.submit(token, { ...answers }, email.value.trim(), website.value, attached)
+    const result = await formService.submit(
+      token,
+      { ...answers },
+      email.value.trim(),
+      website.value,
+      attached,
+      form.value.requireSignIn ? session.value?.accessToken : undefined,
+    )
     sentMessage.value = result.message
     nextAction.value = result.nextAction ?? null
     state.value = 'sent'
@@ -124,6 +174,13 @@ const submit = async () => {
     }
     window.scrollTo({ top: 0, behavior: 'smooth' })
   } catch (e) {
+    // The sign-in ran out: sign in again, the answers stay.
+    if (e instanceof ApiError && e.status === 401 && form.value?.requireSignIn) {
+      signOut()
+      signInError.value = 'Please sign in again to send your response.'
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
     submitError.value =
       e instanceof ApiError && e.status === 429
         ? 'Too many attempts. Please wait a few minutes and try again.'
@@ -288,9 +345,35 @@ onUnmounted(() => {
           <div v-else class="pb-5"></div>
         </header>
 
-        <form v-if="state === 'ready' && form.accepting" novalidate class="space-y-3" @submit.prevent="submit">
+        <!-- A sign-in form asks for Google first. -->
+        <section
+          v-if="state === 'ready' && form.accepting && needsSignIn"
+          class="rounded-2xl bg-white px-6 py-8 text-center shadow-sm ring-1 ring-slate-200"
+        >
+          <i class="fa-solid fa-user-shield text-3xl text-brand" aria-hidden="true"></i>
+          <h2 class="mt-3 font-display text-lg font-semibold text-slate-900">Sign in to continue</h2>
+          <p class="mx-auto mt-1 max-w-sm text-sm text-slate-600">
+            This form needs to know who you are. Sign in with the Google account you were registered with.
+          </p>
+          <div class="mt-5" :class="{ 'pointer-events-none opacity-60': signingIn }">
+            <GoogleSignInButton @credential="signIn" />
+          </div>
+          <p v-if="signingIn" class="mt-3 text-sm text-slate-500">Signing you in…</p>
+          <p v-if="signInError" class="mt-3 text-sm text-red-600">{{ signInError }}</p>
+        </section>
+
+        <p
+          v-if="state === 'ready' && form.accepting && form.requireSignIn && session"
+          class="flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm text-slate-700 shadow-sm ring-1 ring-slate-200"
+        >
+          <i class="fa-solid fa-circle-user text-brand" aria-hidden="true"></i>
+          <span class="min-w-0 flex-1 truncate">Signed in as <strong>{{ session.email }}</strong></span>
+          <button type="button" class="cursor-pointer font-medium text-brand hover:underline" @click="signOut">Not you?</button>
+        </p>
+
+        <form v-if="state === 'ready' && form.accepting && !needsSignIn" novalidate class="space-y-3" @submit.prevent="submit">
           <div
-            v-if="form.collectEmail"
+            v-if="form.collectEmail && !form.requireSignIn"
             id="q-email"
             class="group relative rounded-lg border bg-white px-6 py-6"
             :class="errors.email ? 'border-red-300' : 'border-slate-200'"

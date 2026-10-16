@@ -98,7 +98,7 @@ describe('FormPage', () => {
     await w.find('form').trigger('submit')
     await flushPromises()
 
-    expect(submit).toHaveBeenCalledWith('aFzhvB9qgT', { name1: 'Ada', cls1: 'o2', days: ['mo', 'tu'] }, 'parent@example.com', '', {})
+    expect(submit).toHaveBeenCalledWith('aFzhvB9qgT', { name1: 'Ada', cls1: 'o2', days: ['mo', 'tu'] }, 'parent@example.com', '', {}, undefined)
     expect(w.text()).toContain('See you at camp!')
     // One response per email: no second response offered.
     expect(w.text()).not.toContain('Send another response')
@@ -165,7 +165,7 @@ describe('FormPage', () => {
     expect(w.text()).toContain('Ada CV.pdf')
     await w.find('form').trigger('submit')
     await flushPromises()
-    expect(submit).toHaveBeenCalledWith('aFzhvB9qgT', {}, '', '', { cv01: cv })
+    expect(submit).toHaveBeenCalledWith('aFzhvB9qgT', {}, '', '', { cv01: cv }, undefined)
     w.unmount()
   })
 })

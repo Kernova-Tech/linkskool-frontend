@@ -45,7 +45,16 @@ export interface PublicForm {
   closedMessage: string | null
   collectEmail: boolean
   onePerEmail: boolean
+  /** Google sign-in first; the email then comes from the account. */
+  requireSignIn: boolean
   fields: FormField[]
+}
+
+/** Who is signed in to fill a sign-in form, for this visit only. */
+export interface FormSession {
+  accessToken: string
+  name: string
+  email: string
 }
 
 /** Field id => the answer: text, an option id, or option ids for checkboxes. */
