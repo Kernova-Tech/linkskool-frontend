@@ -108,6 +108,17 @@ const router = createRouter({
       component: () => import('@/views/FormPage.vue'),
     },
     {
+      // An organization's public leaderboard and its reward badges (leaderboard.linkskool.com).
+      path: '/l/:token([A-Za-z0-9]{10})',
+      name: 'leaderboard',
+      component: () => import('@/views/leaderboard/LeaderboardPage.vue'),
+    },
+    {
+      path: '/b/:code([A-Za-z0-9]{12})',
+      name: 'badge',
+      component: () => import('@/views/leaderboard/BadgePage.vue'),
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: NotFoundPage,

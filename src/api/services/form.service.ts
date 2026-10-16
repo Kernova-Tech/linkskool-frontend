@@ -11,11 +11,6 @@ export const formService = {
         return (await apiRequest<PublicForm>(`forms/${encodeURIComponent(token)}`, { headers })).data;
     },
 
-    /**
-     * `website` is a field people never see; it stays empty for them and only
-     * bots fill it. With files, the response goes as multipart: the answers as
-     * JSON, each file as file_{question id}.
-     */
     /** Signs in with a Google ID token; the API checks it and returns the account and its session. */
     async signIn(idToken: string): Promise<FormSession> {
         const result = (await apiRequest<{
@@ -29,6 +24,11 @@ export const formService = {
         };
     },
 
+    /**
+     * `website` is a field people never see; it stays empty for them and only
+     * bots fill it. With files, the response goes as multipart: the answers as
+     * JSON, each file as file_{question id}.
+     */
     async submit(
         token: string,
         answers: FormAnswers,

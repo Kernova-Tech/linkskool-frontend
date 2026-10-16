@@ -19,6 +19,15 @@ RewriteCond %{HTTP_HOST} ^forms\.linkskool\.com$ [NC]
 RewriteCond %{REQUEST_URI} !^/(f/|assets/|favicon\.ico$|logo\.svg$|linkskool-banner-logo\.png$|index\.html$)
 RewriteRule ^ https://linkskool.com%{REQUEST_URI} [R=301,L]
 
+# leaderboard.linkskool.com: the same build, for leaderboards and badges only.
+RewriteCond %{HTTP_HOST} ^leaderboard\.linkskool\.com$ [NC]
+RewriteCond %{REQUEST_URI} !^/(l/|b/|assets/|favicon\.ico$|logo\.svg$|linkskool-banner-logo\.png$|index\.html$)
+RewriteRule ^ https://linkskool.com%{REQUEST_URI} [R=301,L]
+
+# A shared badge previews with who won what.
+RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|Facebot|Twitterbot|WhatsApp|LinkedInBot|Slackbot|TelegramBot|Discordbot|Pinterest|redditbot) [NC]
+RewriteRule ^b/([A-Za-z0-9]{12})/?$ https://linkskool.net/api/v4/public/leaderboards/badge/$1/share [R=302,L]
+
 # Shared forms preview with the form's own title, description and banner.
 RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|Facebot|Twitterbot|WhatsApp|LinkedInBot|Slackbot|TelegramBot|Discordbot|Pinterest|redditbot) [NC]
 RewriteRule ^f/([A-Za-z0-9]{10})/?$ https://linkskool.net/api/v4/public/forms/$1/share [R=302,L]
