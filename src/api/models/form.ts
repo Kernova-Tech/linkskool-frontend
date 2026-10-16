@@ -32,9 +32,19 @@ export interface FormNextAction {
   auto: boolean
 }
 
+/** A task: whose staff do it, what they copy, and where this person stands. */
+export interface FormTask {
+  organization: string | null
+  deadline: string | null
+  shareKit: { kind: 'text' | 'link'; label: string; value: string }[]
+  /** The signed-in person's response, or null before they send one. */
+  mine: { status: 'pending' | 'approved' | 'rejected'; note: string | null; sentAt: string } | null
+}
+
 export interface PublicForm {
-  /** marketing shows the banner as a hero image. */
-  type: 'standard' | 'marketing'
+  /** marketing shows the banner as a hero image; task is staff proof, reviewed. */
+  type: 'standard' | 'marketing' | 'task'
+  task?: FormTask
   title: string
   description: string | null
   bannerUrl: string | null

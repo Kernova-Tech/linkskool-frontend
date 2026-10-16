@@ -5,8 +5,10 @@ import type { FormAnswers, PublicForm, FormNextAction, FormSession } from "../mo
 type FormSent = { message: string; nextAction: FormNextAction | null };
 
 export const formService = {
-    async get(token: string, signal?: AbortSignal) {
-        return (await apiRequest<PublicForm>(`forms/${encodeURIComponent(token)}`, { signal })).data;
+    /** With the session, a task says where this person stands. */
+    async get(token: string, accessToken?: string) {
+        const headers: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+        return (await apiRequest<PublicForm>(`forms/${encodeURIComponent(token)}`, { headers })).data;
     },
 
     /**

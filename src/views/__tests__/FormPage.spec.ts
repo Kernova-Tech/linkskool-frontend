@@ -50,7 +50,7 @@ describe('FormPage', () => {
     get.mockResolvedValue(form)
     const w = await render()
 
-    expect(get).toHaveBeenCalledWith('aFzhvB9qgT')
+    expect(get).toHaveBeenCalledWith('aFzhvB9qgT', undefined)
     expect(w.text()).toContain('Holiday camp')
     expect(w.text()).toContain('About the class')
     // The description is shown formatted, with anything unsafe gone.
