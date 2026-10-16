@@ -63,7 +63,7 @@ describe('FormPage', () => {
     // A blank line left in the editor stays a blank line.
     expect(description.findAll('p').some((p) => p.element.innerHTML === '')).toBe(true)
     expect(w.findAll('img[alt^="Partner logo"]')).toHaveLength(2)
-    expect(w.text()).toContain('* Indicates required question')
+    expect(w.text()).toContain('* Required')
     expect(w.findAll('input[type="radio"]')).toHaveLength(2)
     expect(w.findAll('input[type="checkbox"]')).toHaveLength(2)
     expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex, nofollow')

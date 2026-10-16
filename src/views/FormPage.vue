@@ -3,15 +3,15 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import DOMPurify from 'dompurify'
 import { useRoute } from 'vue-router'
 import { ApiError } from '@/api/client'
-import type { FormAnswers, FormField, PublicForm } from '@/api/models'
+import type { FormAnswers, FormField, FormNextAction, PublicForm } from '@/api/models'
 import { formService } from '@/api/services'
 import FormFieldInput from '@/components/form/FormFieldInput.vue'
 import { siteLinks } from '@/config/site'
 import { FILE_KINDS } from '@/components/form/fileKinds'
 
 /**
- * A form the Linkskool team shared: linkskool.com/f/{token}. Laid out like a
- * Google Form, one narrow column of cards. Anyone with the link may fill it in;
+ * A form the Linkskool team shared: forms.linkskool.com/{token}. Logos,
+ * title, banner and a short description, then straight to the questions. Anyone with the link may fill it in;
  * it is never listed, and search engines are told to leave it out.
  */
 const route = useRoute()
@@ -28,6 +28,11 @@ const submitError = ref('')
 const sentMessage = ref('')
 const sending = ref(false)
 const confirmingClear = ref(false)
+const nextAction = ref<FormNextAction | null>(null)
+const showFullDescription = ref(false)
+
+/** Long enough to be cut to three lines; then See more shows. */
+const descriptionLong = computed(() => descriptionHtml.value.replace(/<[^>]+>/g, '').trim().length > 220)
 
 /**
  * The description is rich text from the team's editor. The API cleans it on
@@ -110,7 +115,13 @@ const submit = async () => {
   try {
     const result = await formService.submit(token, { ...answers }, email.value.trim(), website.value, attached)
     sentMessage.value = result.message
+    nextAction.value = result.nextAction ?? null
     state.value = 'sent'
+    // A marketing form may send people on by itself after a moment.
+    if (nextAction.value?.auto) {
+      const url = nextAction.value.url
+      window.setTimeout(() => window.location.assign(url), 3000)
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' })
   } catch (e) {
     submitError.value =
@@ -169,7 +180,6 @@ onUnmounted(() => {
       <!-- Loading: the shape of a form, so nothing jumps when it arrives. -->
       <div v-if="state === 'loading'" class="space-y-3" aria-busy="true" aria-label="Loading the form">
         <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div class="h-2.5 bg-brand/30"></div>
           <div class="space-y-3 px-6 py-6">
             <div class="h-7 w-2/3 animate-pulse rounded bg-slate-200"></div>
             <div class="h-4 w-full animate-pulse rounded bg-slate-100"></div>
@@ -183,7 +193,6 @@ onUnmounted(() => {
       </div>
 
       <section v-else-if="state === 'missing' || state === 'error'" class="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <div class="h-2.5 bg-brand"></div>
         <div class="px-6 py-12 text-center">
           <i class="fa-solid fa-link-slash text-3xl text-slate-300" aria-hidden="true"></i>
           <h1 class="mt-4 font-display text-xl font-semibold text-slate-900">
@@ -204,58 +213,79 @@ onUnmounted(() => {
       </section>
 
       <template v-else-if="form">
-        <img
-          v-if="form.bannerUrl"
-          :src="form.bannerUrl"
-          alt=""
-          class="aspect-[4/1] w-full rounded-lg border border-slate-200 bg-white object-cover"
-        />
-
-        <!-- Title card -->
-        <header class="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div class="h-2.5 bg-brand"></div>
+        <!-- Title card: logos, title, banner, then the description, short. -->
+        <header class="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
           <div class="px-6 pb-5 pt-6">
-            <div v-if="form.logos.length" class="mb-5 flex flex-wrap items-center gap-x-6 gap-y-3">
+            <div v-if="form.logos.length" class="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3">
               <img
                 v-for="(logo, i) in form.logos"
                 :key="logo"
                 :src="logo"
                 :alt="`Partner logo ${i + 1}`"
-                class="h-10 w-auto max-w-[140px] object-contain sm:h-12"
+                class="h-9 w-auto max-w-[130px] object-contain sm:h-11"
               />
             </div>
-            <h1 class="font-display text-[26px] font-semibold leading-tight text-slate-900 sm:text-[30px]">{{ form.title }}</h1>
-            <!-- eslint-disable-next-line vue/no-v-html -- cleaned twice: by the API, and by DOMPurify here -->
-            <div
-              v-if="descriptionHtml && state !== 'sent'"
-              class="mt-3 text-[15px] leading-relaxed text-slate-700 [&_a]:font-medium [&_a]:text-brand [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-brand-ink [&_blockquote]:border-l-4 [&_blockquote]:border-slate-200 [&_blockquote]:pl-3 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-slate-900 [&_h3]:mt-3 [&_h3]:font-semibold [&_h3]:text-slate-900 [&_li]:mt-1 [&_ol]:ml-5 [&_ol]:list-decimal [&_p]:mb-3 [&_p:last-child]:mb-0 [&_p:empty]:min-h-[1.5em] [&_strong]:font-semibold [&_strong]:text-slate-900 [&_ul]:mb-3 [&_ul]:ml-5 [&_ul]:list-disc"
-              v-html="descriptionHtml"
-            ></div>
+            <h1 class="font-display text-[26px] font-bold leading-tight text-slate-900 sm:text-[30px]">{{ form.title }}</h1>
           </div>
 
-          <div v-if="state === 'sent'" class="border-t border-slate-200 px-6 py-6" role="status">
+          <img
+            v-if="form.bannerUrl"
+            :src="form.bannerUrl"
+            alt=""
+            class="w-full bg-slate-100 object-cover"
+            :class="form.type === 'marketing' ? 'aspect-video' : 'aspect-[4/1]'"
+          />
+
+          <div v-if="descriptionHtml && state !== 'sent'" class="px-6 pt-4">
+            <!-- eslint-disable-next-line vue/no-v-html -- cleaned twice: by the API, and by DOMPurify here -->
+            <div
+              class="text-[15px] leading-relaxed text-slate-700 [&_a]:font-medium [&_a]:text-brand [&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-brand-ink [&_blockquote]:border-l-4 [&_blockquote]:border-slate-200 [&_blockquote]:pl-3 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-slate-900 [&_h3]:mt-3 [&_h3]:font-semibold [&_h3]:text-slate-900 [&_li]:mt-1 [&_ol]:ml-5 [&_ol]:list-decimal [&_p]:mb-3 [&_p:last-child]:mb-0 [&_p:empty]:min-h-[1.5em] [&_strong]:font-semibold [&_strong]:text-slate-900 [&_ul]:mb-3 [&_ul]:ml-5 [&_ul]:list-disc"
+              :class="{ 'line-clamp-3': !showFullDescription }"
+              v-html="descriptionHtml"
+            ></div>
+            <button
+              v-if="descriptionLong"
+              type="button"
+              class="mt-1 cursor-pointer text-sm font-semibold text-brand hover:underline"
+              @click="showFullDescription = !showFullDescription"
+            >
+              {{ showFullDescription ? 'See less' : 'See more' }}
+            </button>
+          </div>
+
+          <div v-if="state === 'sent'" class="mt-2 border-t border-slate-100 px-6 py-6" role="status">
             <p class="flex items-start gap-3 text-[15px] text-slate-800">
               <i class="fa-solid fa-circle-check mt-0.5 text-xl text-emerald-600" aria-hidden="true"></i>
               <span class="whitespace-pre-line">{{ sentMessage }}</span>
             </p>
+            <a
+              v-if="nextAction"
+              :href="nextAction.url"
+              rel="noopener noreferrer"
+              class="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-6 py-3.5 text-base font-semibold text-white hover:bg-brand-ink sm:w-auto sm:inline-flex"
+            >
+              {{ nextAction.label }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+            </a>
+            <p v-if="nextAction?.auto" class="mt-2 text-sm text-slate-500">Taking you there in a moment…</p>
             <button
               v-if="!form.onePerEmail"
               type="button"
-              class="mt-5 cursor-pointer text-sm font-medium text-brand underline-offset-4 hover:underline"
+              class="mt-5 block cursor-pointer text-sm font-medium text-brand underline-offset-4 hover:underline"
               @click="startAgain"
             >
               Send another response
             </button>
           </div>
 
-          <div v-else-if="!form.accepting" class="border-t border-slate-200 px-6 py-6">
+          <div v-else-if="!form.accepting" class="mt-2 border-t border-slate-100 px-6 py-6">
             <p class="flex items-start gap-3 text-[15px] text-slate-800">
               <i class="fa-solid fa-lock mt-0.5 text-lg text-slate-400" aria-hidden="true"></i>
               <span class="whitespace-pre-line">{{ form.closedMessage }}</span>
             </p>
           </div>
 
-          <p v-else-if="hasRequired" class="border-t border-slate-200 px-6 py-3 text-sm text-red-600">* Indicates required question</p>
+          <p v-else-if="hasRequired" class="px-6 pb-4 pt-3 text-sm text-red-600">* Required</p>
+          <div v-else class="pb-5"></div>
         </header>
 
         <form v-if="state === 'ready' && form.accepting" novalidate class="space-y-3" @submit.prevent="submit">

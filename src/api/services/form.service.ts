@@ -1,5 +1,8 @@
 import { apiRequest } from "../client";
-import type { FormAnswers, PublicForm } from "../models";
+import type { FormAnswers, PublicForm, FormNextAction } from "../models";
+
+/** The thank-you message, and the next step if the form has one. */
+type FormSent = { message: string; nextAction: FormNextAction | null };
 
 export const formService = {
     async get(token: string, signal?: AbortSignal) {
@@ -14,7 +17,7 @@ export const formService = {
     async submit(token: string, answers: FormAnswers, email: string, website: string, files: Record<string, File> = {}) {
         const path = `forms/${encodeURIComponent(token)}/responses`;
         if (Object.keys(files).length === 0) {
-            return (await apiRequest<{ message: string }>(path, { method: "POST", body: { answers, email, website } })).data;
+            return (await apiRequest<FormSent>(path, { method: "POST", body: { answers, email, website } })).data;
         }
 
         const body = new FormData();
@@ -24,6 +27,6 @@ export const formService = {
         for (const [fieldId, file] of Object.entries(files)) {
             body.append(`file_${fieldId}`, file, file.name);
         }
-        return (await apiRequest<{ message: string }>(path, { method: "POST", body })).data;
+        return (await apiRequest<FormSent>(path, { method: "POST", body })).data;
     },
 };

@@ -25,7 +25,16 @@ export interface FormField {
   maxMb?: number
 }
 
+/** The button after sending; auto goes there by itself. */
+export interface FormNextAction {
+  label: string
+  url: string
+  auto: boolean
+}
+
 export interface PublicForm {
+  /** marketing shows the banner as a hero image. */
+  type: 'standard' | 'marketing'
   title: string
   description: string | null
   bannerUrl: string | null
