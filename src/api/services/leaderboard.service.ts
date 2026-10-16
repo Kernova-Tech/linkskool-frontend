@@ -4,9 +4,10 @@ export type BoardPeriod = "month" | "last_month" | "all";
 
 export interface PublicBoard {
     organization: string;
+    logoUrl: string | null;
     period: BoardPeriod;
     periodLabel: string;
-    tasks: number;
+    tasks: { title: string; deadline: string | null; assigned: number; done: number }[];
     branches: { id: number | null; name: string; approved: number; assigned: number; rate: number; rank: number }[];
     staff: { name: string; branch: string | null; approved: number; onTime: number; rank: number }[];
 }
@@ -19,6 +20,7 @@ export interface Badge {
     message: string | null;
     periodLabel: string | null;
     organization: string;
+    logoUrl: string | null;
     awardedAt: string;
 }
 

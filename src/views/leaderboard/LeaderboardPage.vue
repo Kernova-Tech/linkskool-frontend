@@ -9,6 +9,8 @@ const token = String(useRoute().params.token ?? "");
 const board = ref<PublicBoard | null>(null);
 const state = ref<"loading" | "missing" | "ready">("loading");
 const period = ref<BoardPeriod>("month");
+const day = (at: string) =>
+  new Date(at.replace(" ", "T") + "Z").toLocaleDateString(undefined, { day: "numeric", month: "short" });
 const medal = (rank: number) => ["🥇", "🥈", "🥉"][rank - 1] ?? String(rank);
 
 const load = async () => {
@@ -40,6 +42,12 @@ onUnmounted(remove);
 
       <template v-else-if="board">
         <header class="text-center">
+          <img
+            v-if="board.logoUrl"
+            :src="board.logoUrl"
+            :alt="board.organization"
+            class="mx-auto mb-3 h-16 w-auto max-w-[200px] object-contain"
+          />
           <p class="text-sm text-slate-500">{{ board.organization }}</p>
           <h1 class="font-display text-2xl font-bold text-slate-900">Leaderboard</h1>
           <select
@@ -54,18 +62,36 @@ onUnmounted(remove);
           </select>
         </header>
 
-        <p v-if="!board.tasks" class="rounded-lg bg-white px-4 py-10 text-center text-sm text-slate-500">
+        <p v-if="!board.tasks.length" class="rounded-lg bg-white px-4 py-10 text-center text-sm text-slate-500">
           No tasks yet for {{ board.periodLabel }}.
         </p>
 
         <template v-else>
+          <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <h2 class="px-4 pt-4 text-sm font-semibold text-slate-900">
+              Tasks · {{ board.periodLabel }}
+            </h2>
+            <ul class="divide-y divide-slate-100">
+              <li v-for="(t, i) in board.tasks" :key="i" class="flex items-center gap-3 px-4 py-3">
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-slate-800">{{ t.title }}</span>
+                  <span v-if="t.deadline" class="block text-xs text-slate-500">Deadline {{ day(t.deadline) }}</span>
+                </span>
+                <span class="text-sm text-slate-600">{{ t.done }}/{{ t.assigned }} done</span>
+              </li>
+            </ul>
+          </section>
+
           <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
             <h2 class="px-4 pt-4 text-sm font-semibold text-slate-900">Branches</h2>
             <ol class="divide-y divide-slate-100">
               <li v-for="b in board.branches" :key="b.id ?? 0" class="flex items-center gap-3 px-4 py-3">
                 <span class="w-7 text-center font-semibold">{{ medal(b.rank) }}</span>
                 <span class="flex-1 text-slate-800">{{ b.name }}</span>
-                <span class="font-semibold text-slate-900">{{ b.rate }}%</span>
+                <span class="text-right">
+                  <span class="block font-semibold text-slate-900">{{ b.rate }}%</span>
+                  <span class="block text-xs text-slate-500">{{ b.approved }}/{{ b.assigned }}</span>
+                </span>
               </li>
             </ol>
           </section>

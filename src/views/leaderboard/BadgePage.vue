@@ -39,6 +39,12 @@ onUnmounted(remove);
 
     <main v-else-if="badge" class="w-full max-w-sm space-y-4 text-center">
       <div class="rounded-2xl border border-amber-200 bg-gradient-to-b from-amber-50 to-white px-6 py-8 shadow-sm">
+        <img
+          v-if="badge.logoUrl"
+          :src="badge.logoUrl"
+          :alt="badge.organization"
+          class="mx-auto mb-4 h-12 w-auto max-w-[160px] object-contain"
+        />
         <div class="text-6xl">🏆</div>
         <p class="mt-4 text-sm text-slate-500">{{ badge.organization }}</p>
         <h1 class="mt-1 font-display text-2xl font-bold text-slate-900">{{ badge.recipient }}</h1>
