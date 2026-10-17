@@ -20,9 +20,10 @@ export interface FormField {
   help: string | null
   required: boolean
   options?: { id: string; label: string }[]
-  /** File questions: what kind of file, and the largest in MB. */
+  /** File questions: what kind of file, the largest in MB, and how many (1 to 10). */
   accept?: 'documents' | 'images' | 'any'
   maxMb?: number
+  maxFiles?: number
 }
 
 /** The button after sending; auto goes there by itself. */
@@ -38,7 +39,14 @@ export interface FormTask {
   deadline: string | null
   shareKit: { kind: 'text' | 'link'; label: string; value: string }[]
   /** The signed-in person's response, or null before they send one. */
-  mine: { status: 'pending' | 'approved' | 'rejected'; note: string | null; sentAt: string } | null
+  mine: {
+    status: 'pending' | 'approved' | 'rejected'
+    note: string | null
+    sentAt: string
+    attempt: number
+    /** Once approved, a card to share the win, when the task allows it. */
+    shareUrl: string | null
+  } | null
 }
 
 export interface PublicForm {
@@ -69,3 +77,20 @@ export interface FormSession {
 
 /** Field id => the answer: text, an option id, or option ids for checkboxes. */
 export type FormAnswers = Record<string, string | string[]>
+
+/** One of the signed-in person's tasks, across the organizations they work for. */
+export interface MyTask {
+  title: string
+  organization: string
+  logoUrl: string | null
+  link: string
+  deadline: string | null
+  open: boolean
+  status: 'not_started' | 'pending' | 'approved' | 'rejected'
+  note: string | null
+  attempt: number
+  sentAt: string | null
+  shareUrl: string | null
+  /** Open, and not sent yet or sent back. */
+  needsAction: boolean
+}

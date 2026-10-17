@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import type { FormField } from '@/api/models'
 import { FILE_KINDS, formatSize } from './fileKinds'
 
@@ -9,7 +9,7 @@ import { FILE_KINDS, formatSize } from './fileKinds'
  */
 const props = defineProps<{ field: FormField; error?: string }>()
 const model = defineModel<string | string[]>({ default: '' })
-const file = defineModel<File | null>('file', { default: null })
+const files = defineModel<File[]>('files', { default: () => [] })
 
 const inputId = computed(() => `field-${props.field.id}`)
 const describedBy = computed(
@@ -22,12 +22,30 @@ const toggle = (optionId: string, on: boolean) => {
 }
 
 const kind = computed(() => FILE_KINDS[props.field.accept ?? 'documents'])
+const maxFiles = computed(() => props.field.maxFiles ?? 1)
 const fileInput = ref<HTMLInputElement | null>(null)
+/** Picked files join the list, up to the question's limit; one file replaces one. */
 const onFile = (event: Event) => {
   const target = event.target as HTMLInputElement
-  file.value = target.files?.[0] ?? null
+  const picked = Array.from(target.files ?? [])
+  files.value = maxFiles.value === 1 ? picked.slice(0, 1) : [...files.value, ...picked].slice(0, maxFiles.value)
   target.value = ''
 }
+const removeFile = (i: number) => {
+  files.value = files.value.filter((_, at) => at !== i)
+}
+
+// A small preview of each picture, so people can see they chose the right one.
+const previews = ref<(string | null)[]>([])
+watch(
+  files,
+  (list) => {
+    previews.value.forEach((url) => url && URL.revokeObjectURL(url))
+    previews.value = list.map((f) => (f.type.startsWith('image/') ? URL.createObjectURL(f) : null))
+  },
+  { immediate: true },
+)
+onUnmounted(() => previews.value.forEach((url) => url && URL.revokeObjectURL(url)))
 
 // Underlined like a line on paper; thicker in the brand colour while typing.
 const line = computed(() => [
@@ -150,35 +168,46 @@ const line = computed(() => [
             type="file"
             class="sr-only"
             :accept="kind.accept"
+            :multiple="maxFiles > 1"
             :aria-describedby="describedBy"
             :aria-invalid="!!error"
             @change="onFile"
           />
-          <div v-if="file" class="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5">
-            <i class="fa-solid fa-file-lines text-lg text-brand" aria-hidden="true"></i>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-sm font-medium text-slate-900">{{ file.name }}</span>
-              <span class="block text-xs text-slate-500">{{ formatSize(file.size) }}</span>
-            </span>
-            <button
-              type="button"
-              class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-slate-500 hover:bg-slate-200 hover:text-slate-800"
-              :aria-label="`Remove ${file.name}`"
-              @click="file = null"
+          <ul v-if="files.length" class="mb-3 space-y-2">
+            <li
+              v-for="(f, i) in files"
+              :key="`${f.name}-${f.size}-${i}`"
+              class="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
             >
-              <i class="fa-solid fa-xmark"></i>
-            </button>
-          </div>
+              <img v-if="previews[i]" :src="previews[i]!" alt="" class="h-10 w-10 shrink-0 rounded object-cover" />
+              <i v-else class="fa-solid fa-file-lines w-10 text-center text-lg text-brand" aria-hidden="true"></i>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-sm font-medium text-slate-900">{{ f.name }}</span>
+                <span class="block text-xs text-slate-500">{{ formatSize(f.size) }}</span>
+              </span>
+              <button
+                type="button"
+                class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-slate-500 hover:bg-slate-200 hover:text-slate-800"
+                :aria-label="`Remove ${f.name}`"
+                @click="removeFile(i)"
+              >
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </li>
+          </ul>
           <button
-            v-else
+            v-if="files.length < maxFiles"
             type="button"
             class="inline-flex cursor-pointer items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition"
             :class="error ? 'border-red-400 text-red-700 hover:bg-red-50' : 'border-slate-300 text-brand hover:border-brand hover:bg-brand-soft'"
             @click="fileInput?.click()"
           >
-            <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i> Add file
+            <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i>
+            {{ files.length ? 'Add another' : maxFiles > 1 ? 'Add files' : 'Add file' }}
           </button>
-          <p class="mt-2 text-xs text-slate-500">{{ kind.label }} · up to {{ field.maxMb ?? 5 }} MB</p>
+          <p class="mt-2 text-xs text-slate-500">
+            {{ kind.label }} · up to {{ field.maxMb ?? 5 }} MB each<template v-if="maxFiles > 1"> · up to {{ maxFiles }} files ({{ files.length }} added)</template>
+          </p>
         </div>
 
         <input

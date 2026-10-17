@@ -155,11 +155,11 @@ describe('FormPage', () => {
 
     await attach(new File(['x'], 'photo.png'))
     await w.find('form').trigger('submit')
-    expect(w.text()).toContain('Choose a PDF, Word or text file.')
+    expect(w.text()).toContain('“photo.png” is not a PDF, Word or text file.')
 
     await attach(new File([new Uint8Array(2 * 1048576)], 'big.pdf'))
     await w.find('form').trigger('submit')
-    expect(w.text()).toContain('This file is too large. The limit is 1 MB.')
+    expect(w.text()).toContain('“big.pdf” is too large. The limit is 1 MB each.')
     expect(submit).not.toHaveBeenCalled()
 
     const cv = new File(['%PDF'], 'Ada CV.pdf')
@@ -167,7 +167,43 @@ describe('FormPage', () => {
     expect(w.text()).toContain('Ada CV.pdf')
     await w.find('form').trigger('submit')
     await flushPromises()
-    expect(submit).toHaveBeenCalledWith('aFzhvB9qgT', {}, '', '', { cv01: cv }, undefined)
+    expect(submit).toHaveBeenCalledWith('aFzhvB9qgT', {}, '', '', { cv01: [cv] }, undefined)
+    w.unmount()
+  })
+
+  it('takes several files on a question that allows them, up to its limit', async () => {
+    get.mockResolvedValue({
+      title: 'Proof',
+      description: null,
+      bannerUrl: null,
+      logos: [],
+      accepting: true,
+      closedMessage: null,
+      collectEmail: false,
+      onePerEmail: false,
+      fields: [
+        { id: 'shots', type: 'file', label: 'Screenshots', help: null, required: true, accept: 'images', maxMb: 5, maxFiles: 2 },
+      ],
+    })
+    submit.mockResolvedValue({ message: 'Thanks' })
+    const w = await render()
+    const input = w.find('#field-shots')
+    expect(input.attributes('multiple')).toBeDefined()
+
+    const a = new File(['a'], 'a.png', { type: 'image/png' })
+    const b = new File(['b'], 'b.png', { type: 'image/png' })
+    const c = new File(['c'], 'c.png', { type: 'image/png' })
+    Object.defineProperty(input.element, 'files', { value: [a, b, c], configurable: true })
+    await input.trigger('change')
+    // The third is past the limit and is left out.
+    expect(w.text()).toContain('a.png')
+    expect(w.text()).toContain('b.png')
+    expect(w.text()).not.toContain('c.png')
+    expect(w.text()).toContain('(2 added)')
+
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(submit).toHaveBeenCalledWith('aFzhvB9qgT', {}, '', '', { shots: [a, b] }, undefined)
     w.unmount()
   })
 })

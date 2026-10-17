@@ -1,5 +1,5 @@
 import { apiRequest } from "../client";
-import type { FormAnswers, PublicForm, FormNextAction, FormSession } from "../models";
+import type { FormAnswers, PublicForm, FormNextAction, FormSession, MyTask } from "../models";
 
 /** The thank-you message, and the next step if the form has one. */
 type FormSent = { message: string; nextAction: FormNextAction | null };
@@ -27,19 +27,19 @@ export const formService = {
     /**
      * `website` is a field people never see; it stays empty for them and only
      * bots fill it. With files, the response goes as multipart: the answers as
-     * JSON, each file as file_{question id}.
+     * JSON, and every file of a question as file_{question id}[].
      */
     async submit(
         token: string,
         answers: FormAnswers,
         email: string,
         website: string,
-        files: Record<string, File> = {},
+        files: Record<string, File[]> = {},
         accessToken?: string,
     ) {
         const path = `forms/${encodeURIComponent(token)}/responses`;
         const headers: Record<string, string> = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
-        if (Object.keys(files).length === 0) {
+        if (Object.values(files).every((list) => list.length === 0)) {
             return (await apiRequest<FormSent>(path, { method: "POST", body: { answers, email, website }, headers })).data;
         }
 
@@ -47,9 +47,16 @@ export const formService = {
         body.append("answers", JSON.stringify(answers));
         body.append("email", email);
         body.append("website", website);
-        for (const [fieldId, file] of Object.entries(files)) {
-            body.append(`file_${fieldId}`, file, file.name);
+        for (const [fieldId, list] of Object.entries(files)) {
+            for (const file of list) {
+                body.append(`file_${fieldId}[]`, file, file.name);
+            }
         }
         return (await apiRequest<FormSent>(path, { method: "POST", body, headers })).data;
+    },
+
+    /** Every task the signed-in person is on: what to do first, then what is waiting, then what is done. */
+    async mine(accessToken: string) {
+        return (await apiRequest<MyTask[]>("forms/mine", { headers: { Authorization: `Bearer ${accessToken}` } })).data;
     },
 };

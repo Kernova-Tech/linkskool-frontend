@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import DOMPurify from "dompurify";
-import { useRoute } from "vue-router";
+import { RouterLink, useRoute } from "vue-router";
 import { ApiError } from "@/api/client";
 import type { FormAnswers, FormField, FormNextAction, FormSession, PublicForm } from "@/api/models";
 import { formService } from "@/api/services";
@@ -21,7 +21,7 @@ const token = String(route.params.token ?? "");
 const form = ref<PublicForm | null>(null);
 const state = ref<"loading" | "missing" | "error" | "ready" | "sent">("loading");
 const answers = reactive<FormAnswers>({});
-const files = reactive<Record<string, File | null>>({});
+const files = reactive<Record<string, File[]>>({});
 const email = ref("");
 const website = ref("");
 const errors = reactive<Record<string, string>>({});
@@ -169,13 +169,16 @@ const PHONE = /^\+?[0-9 ()-]{7,20}$/;
 /** The same checks the server makes, so mistakes show beside the question before sending. */
 const check = (field: FormField): string => {
   if (field.type === "file") {
-    const file = files[field.id];
-    if (!file) return field.required ? "This question needs a file." : "";
+    const list = files[field.id] ?? [];
+    if (!list.length) return field.required ? "This question needs a file." : "";
+    if (list.length > (field.maxFiles ?? 1)) return `Add up to ${field.maxFiles ?? 1} files.`;
     const kind = FILE_KINDS[field.accept ?? "documents"];
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-    if (!kind.extensions.includes(ext)) return `Choose a ${kind.label} file.`;
-    if (file.size > (field.maxMb ?? 5) * 1048576)
-      return `This file is too large. The limit is ${field.maxMb ?? 5} MB.`;
+    for (const file of list) {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!kind.extensions.includes(ext)) return `“${file.name}” is not a ${kind.label} file.`;
+      if (file.size > (field.maxMb ?? 5) * 1048576)
+        return `“${file.name}” is too large. The limit is ${field.maxMb ?? 5} MB each.`;
+    }
     return "";
   }
 
@@ -215,9 +218,7 @@ const submit = async () => {
   submitError.value = "";
   if (!validate() || !form.value) return;
 
-  const attached = Object.fromEntries(
-    Object.entries(files).filter((e): e is [string, File] => e[1] instanceof File),
-  );
+  const attached = Object.fromEntries(Object.entries(files).filter(([, list]) => list.length > 0));
   sending.value = true;
   try {
     const result = await formService.submit(
@@ -426,6 +427,13 @@ onUnmounted(() => {
             >
               Send another response
             </button>
+            <RouterLink
+              v-if="form.type === 'task'"
+              to="/tasks"
+              class="mt-5 block text-sm font-medium text-brand underline-offset-4 hover:underline"
+            >
+              See all your tasks
+            </RouterLink>
           </div>
 
           <div v-else-if="!form.accepting" class="mt-2 border-t border-slate-100 px-6 py-6">
@@ -457,6 +465,9 @@ onUnmounted(() => {
             >
               <i class="fa-regular fa-clock mr-1" aria-hidden="true"></i>Due {{ deadlineText }}
             </span>
+            <RouterLink v-if="session" to="/tasks" class="ml-auto text-sm font-medium text-brand hover:underline">
+              All your tasks
+            </RouterLink>
           </p>
 
           <div
@@ -478,6 +489,25 @@ onUnmounted(() => {
               }}
             </p>
             <p v-if="task.mine.note" class="mt-1">“{{ task.mine.note }}”</p>
+            <!-- Approved: a card to post in the group. What they sent stays private. -->
+            <div v-if="task.mine.status === 'approved' && task.mine.shareUrl" class="mt-3 flex flex-wrap gap-2">
+              <a
+                :href="`https://wa.me/?text=${encodeURIComponent(`✅ I completed “${form.title}”${task.organization ? ` for ${task.organization}` : ''}! ${task.mine.shareUrl}`)}`"
+                target="_blank"
+                rel="noopener"
+                class="inline-flex items-center gap-2 rounded-full bg-[#25D366] px-4 py-2 text-sm font-semibold text-white"
+              >
+                <i class="fa-brands fa-whatsapp" aria-hidden="true"></i> Share in the group
+              </a>
+              <a
+                :href="task.mine.shareUrl"
+                target="_blank"
+                rel="noopener"
+                class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-800"
+              >
+                See your card
+              </a>
+            </div>
             <p v-if="task.mine.status === 'pending'" class="mt-1">
               You can send it again below to replace it.
             </p>
@@ -613,11 +643,11 @@ onUnmounted(() => {
             v-for="field in form.fields"
             :key="field.id"
             :model-value="answers[field.id] ?? (field.type === 'checkboxes' ? [] : '')"
-            :file="files[field.id] ?? null"
+            :files="files[field.id] ?? []"
             :field="field"
             :error="errors[field.id]"
             @update:model-value="(v) => (answers[field.id] = v)"
-            @update:file="(f) => (files[field.id] = f)"
+            @update:files="(list) => (files[field.id] = list)"
           />
 
           <!-- People never see this; bots fill it in and are quietly turned away. -->

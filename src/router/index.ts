@@ -119,6 +119,18 @@ const router = createRouter({
       component: () => import('@/views/leaderboard/BadgePage.vue'),
     },
     {
+      // An approved task's card, to share in the group.
+      path: '/d/:code([A-Za-z0-9]{12})',
+      name: 'done',
+      component: () => import('@/views/leaderboard/DonePage.vue'),
+    },
+    {
+      // Every task a staff member is on, across their organizations.
+      path: '/tasks',
+      name: 'my-tasks',
+      component: () => import('@/views/MyTasksPage.vue'),
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: NotFoundPage,
