@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive } from 'vue'
+import { RouterLink } from 'vue-router'
 import type { CourseDetail } from '@/api/models'
 
 const props = defineProps<{
@@ -178,17 +179,12 @@ const handleSubmit = async () => {
                         <p v-if="errors.phone" class="mt-1.5 text-sm text-red-600">{{ errors.phone }}</p>
                     </div>
 
-                    <!-- Terms -->
-                    <div class="flex items-start gap-3 p-4 bg-brand-soft rounded-xl">
-                        <i class="fa-solid fa-info-circle text-brand mt-0.5"></i>
-                        <p class="text-sm text-slate-700">
-                            <template v-if="mode === 'register'">
-                                No payment yet. Registering holds your seat; you can pay right after or later.
-                            </template>
-                            We'll email you the curriculum. By registering, you agree to our Terms of Service and
-                            Privacy Policy.
-                        </p>
-                    </div>
+                    <p class="text-xs text-slate-500">
+                        By registering, you agree to our
+                        <RouterLink to="/terms-of-use" class="underline hover:text-brand" target="_blank">Terms</RouterLink>
+                        and
+                        <RouterLink to="/privacy-policy" class="underline hover:text-brand" target="_blank">Privacy Policy</RouterLink>.
+                    </p>
                 </div>
 
                 <!-- Actions -->

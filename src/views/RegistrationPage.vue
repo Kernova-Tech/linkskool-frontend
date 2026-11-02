@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import AppFooter from '@/components/AppFooter.vue'
@@ -109,9 +109,21 @@ onMounted(async () => {
   }
 
   if (route.query.pay === '1') {
+    // Drop ?pay=1 first: back from checkout (or a cancelled payment) then lands
+    // on this page as it is, instead of opening checkout all over again.
+    const query = { ...route.query }
+    delete query.pay
+    await router.replace({ query })
     await payNow()
   }
 })
+
+/** Back from checkout, the browser may restore this page as it was left: mid-checkout. */
+const onPageShow = (event: PageTransitionEvent) => {
+  if (event.persisted) isStartingCheckout.value = false
+}
+onMounted(() => window.addEventListener('pageshow', onPageShow))
+onBeforeUnmount(() => window.removeEventListener('pageshow', onPageShow))
 </script>
 
 <template>
@@ -222,7 +234,7 @@ onMounted(async () => {
             </div>
             <p class="mt-4 text-center text-xs text-slate-500">
               <i class="fa-solid fa-shield-halved mr-1"></i>
-              Secure checkout by Paystack. Paying later? We'll email you a link to pay whenever you're ready.
+              Secure checkout by Paystack.
             </p>
           </div>
         </section>

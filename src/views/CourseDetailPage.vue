@@ -11,6 +11,7 @@ import { ApiError } from '@/api/client'
 import { enrollmentService, programService } from '@/api/services'
 import { resolveAssetUrl } from '@/api/util/assetUrl'
 import { usePageMeta } from '@/composables/usePageMeta'
+import { useWebShare } from '@/composables/useWebShare'
 
 interface EnrollmentFormData {
   firstName: string
@@ -188,6 +189,39 @@ const toEmbeddableVideoUrl = (rawUrl: string | null | undefined) => {
 }
 
 const displayVideoUrl = computed(() => toEmbeddableVideoUrl(courseDetail.value?.cohort.videoUrl))
+
+const heroImage = computed(() => {
+  const image = courseDetail.value?.cohort.imageUrl || courseDetail.value?.course.imageUrl
+  return image ? (resolveAssetUrl(image) ?? '') : ''
+})
+
+/** The description as plain text: tags out, entities decoded, paragraphs kept. */
+const aboutText = computed(() => {
+  const raw = courseDetail.value?.cohort.description || courseDetail.value?.course.description || ''
+  if (!raw) return ''
+  const doc = new DOMParser().parseFromString(
+    raw.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n\n'),
+    'text/html',
+  )
+  return (doc.body.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim()
+})
+const showFullAbout = ref(false)
+
+const startLabel = computed(() => {
+  const value = courseDetail.value?.cohort.startDate
+  const date = value ? new Date(value.replace(' ', 'T')) : null
+  return date && !Number.isNaN(date.getTime())
+    ? date.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })
+    : ''
+})
+
+const { share, status: shareStatus } = useWebShare()
+const shareCourse = () =>
+  share({
+    url: pageUrl.value,
+    title: courseDetail.value?.course.courseName ?? 'LinkSkool course',
+    text: `${courseDetail.value?.course.courseName ?? 'A course'} on LinkSkool`,
+  })
 const learningTypeLabel = computed(() =>
   courseDetail.value?.cohort.learningType === 'instructor_led' ? 'Instructor-led' : 'Self-paced',
 )
@@ -319,46 +353,98 @@ watch(detailRef, () => {
 
     <div v-else-if="courseDetail" class="pb-28 pt-20 lg:pb-20 lg:pt-24">
       <div class="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div v-if="displayVideoUrl" class="mb-8 sm:mb-10">
-          <div class="relative aspect-video overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:rounded-2xl">
-            <iframe :src="displayVideoUrl" class="w-full h-full"
-              :title="`${courseDetail.course.courseName} course video`"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowfullscreen></iframe>
+        <!-- Hero, as on the app: the course over its picture, with the action and Share. -->
+        <section
+          class="relative isolate overflow-hidden rounded-2xl bg-gradient-to-br from-[#1e3a8a] via-brand to-[#4338ca] text-white shadow-lg"
+        >
+          <img
+            v-if="heroImage"
+            :src="heroImage"
+            alt=""
+            aria-hidden="true"
+            class="absolute inset-0 -z-10 h-full w-full object-cover opacity-30"
+          />
+          <div class="absolute inset-0 -z-10 bg-gradient-to-r from-slate-950/85 via-slate-950/60 to-transparent"></div>
+
+          <button
+            type="button"
+            class="absolute right-3 top-3 z-10 inline-flex h-9 cursor-pointer items-center gap-2 rounded-full bg-white/95 px-3.5 text-xs font-semibold text-brand shadow-sm transition hover:bg-white sm:right-4 sm:top-4"
+            :aria-label="shareStatus === 'copied' ? 'Link copied' : 'Share this course'"
+            @click="shareCourse"
+          >
+            <i :class="shareStatus === 'copied' ? 'fa-solid fa-check' : 'fa-solid fa-share-nodes'" aria-hidden="true"></i>
+            {{ shareStatus === 'copied' ? 'Link copied' : 'Share' }}
+          </button>
+
+          <div class="max-w-2xl px-5 pb-7 pt-14 sm:px-8 sm:py-10">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-blue-200">{{ courseDetail.program.name }}</p>
+            <h1 class="mt-2 break-words text-2xl font-semibold leading-tight tracking-[-0.02em] sm:text-3xl lg:text-4xl">
+              {{ courseDetail.course.courseName }}
+            </h1>
+            <p v-if="aboutText" class="mt-3 line-clamp-3 text-sm leading-relaxed text-blue-50/90 sm:text-base">
+              {{ aboutText }}
+            </p>
+
+            <div class="mt-5 flex flex-wrap gap-2 text-xs font-medium">
+              <span v-if="startLabel" class="rounded-full bg-white/15 px-3 py-1 backdrop-blur">Starts {{ startLabel }}</span>
+              <span class="rounded-full bg-white/15 px-3 py-1 backdrop-blur">{{ learningTypeLabel }}</span>
+              <span v-if="courseDetail.cohort.deliveryMode" class="rounded-full bg-white/15 px-3 py-1 capitalize backdrop-blur">
+                {{ courseDetail.cohort.deliveryMode }}
+              </span>
+              <span v-if="courseDetail.cohort.instructorName" class="rounded-full bg-white/15 px-3 py-1 backdrop-blur">
+                With {{ courseDetail.cohort.instructorName }}
+              </span>
+            </div>
+
+            <div class="mt-7 flex flex-wrap gap-3">
+              <button
+                type="button"
+                class="inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-white px-6 text-sm font-semibold text-brand shadow transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-70"
+                :disabled="isEnrollmentClosed"
+                @click="handleRegister"
+              >
+                {{ isEnrollmentClosed ? 'Enrollment closed' : isFreeCourse ? 'Register for free' : 'Register now' }}
+                <i v-if="!isEnrollmentClosed" class="fa-solid fa-arrow-right text-xs"></i>
+              </button>
+            </div>
           </div>
-        </div>
+        </section>
 
-        <div class="grid min-w-0 gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-12">
-          <div class="min-w-0 space-y-8">
-            <div class="border-b border-slate-200 pb-8">
-              <p class="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-brand">{{ courseDetail.program.name }}</p>
-              <h1 class="break-words text-3xl font-semibold leading-tight tracking-[-0.03em] text-slate-950 sm:text-4xl lg:text-5xl">
-                {{ courseDetail.course.courseName }}
-              </h1>
-              <p class="mt-3 break-words text-lg text-slate-600 sm:text-xl">
-                {{ courseDetail.cohort.title }}
-              </p>
-
-              <div class="mt-6 flex flex-wrap gap-x-6 gap-y-3 text-sm text-slate-600">
-                <div v-if="courseDetail.cohort.deliveryMode" class="flex items-center gap-2">
-                  <i class="fa-solid fa-video text-slate-400"></i>
-                  <span>{{ courseDetail.cohort.deliveryMode }}</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <i class="fa-solid fa-signal text-slate-400"></i>
-                  <span>{{ learningTypeLabel }}</span>
-                </div>
-              </div>
+        <div class="mt-8 grid min-w-0 gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-12">
+          <div class="min-w-0 space-y-10">
+            <!-- The cohort's video when it has one, else its picture. -->
+            <div
+              v-if="displayVideoUrl || heroImage"
+              class="relative aspect-video overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:rounded-2xl"
+            >
+              <iframe
+                v-if="displayVideoUrl"
+                :src="displayVideoUrl"
+                class="h-full w-full"
+                :title="`${courseDetail.course.courseName} course video`"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen
+              ></iframe>
+              <img v-else :src="heroImage" :alt="courseDetail.course.courseName" class="h-full w-full object-cover" />
             </div>
 
-            <div class="min-w-0">
-              <h2 class="mb-4 text-2xl font-semibold tracking-tight text-slate-950">About this course</h2>
-              <div class="break-words whitespace-pre-line leading-8 text-slate-600">
-                {{ courseDetail.cohort.description || courseDetail.course.description }}
-              </div>
-            </div>
+            <section v-if="aboutText" class="min-w-0">
+              <h2 class="text-2xl font-semibold tracking-tight text-slate-950">About this course</h2>
+              <p
+                class="mt-4 whitespace-pre-line break-words leading-8 text-slate-600"
+                :class="{ 'line-clamp-6': !showFullAbout }"
+              >{{ aboutText }}</p>
+              <button
+                v-if="aboutText.length > 360"
+                type="button"
+                class="mt-2 cursor-pointer text-sm font-semibold text-brand hover:underline"
+                @click="showFullAbout = !showFullAbout"
+              >
+                {{ showFullAbout ? 'Show less' : 'Show more' }}
+              </button>
+            </section>
 
-            <div v-if="parsedBenefits.length > 0">
+            <section v-if="parsedBenefits.length > 0">
               <h2 class="mb-6 text-2xl font-semibold tracking-tight text-slate-950">What you'll learn</h2>
               <div class="grid gap-3 sm:grid-cols-2">
                 <div v-for="(benefit, index) in parsedBenefits" :key="`${benefit}-${index}`"
@@ -369,9 +455,9 @@ watch(detailRef, () => {
                   <p class="min-w-0 break-words text-slate-700">{{ benefit }}</p>
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div v-if="courseDetail.cohort.instructorName" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-7">
+            <section v-if="courseDetail.cohort.instructorName" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-7">
               <h2 class="mb-5 text-2xl font-semibold tracking-tight text-slate-950">Your instructor</h2>
               <div class="flex min-w-0 items-center gap-4">
                 <div class="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-xl font-semibold text-slate-700">
@@ -384,10 +470,10 @@ watch(detailRef, () => {
                   <p class="mt-1 text-sm text-slate-500">Course instructor</p>
                 </div>
               </div>
-            </div>
+            </section>
           </div>
 
-          <aside class="min-w-0">
+          <aside class="order-first min-w-0 lg:order-none">
             <EnrollmentCard :course-detail="courseDetail" @register="handleRegister" />
           </aside>
         </div>
