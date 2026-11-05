@@ -7,7 +7,8 @@ import { useNoIndex } from "./useNoIndex";
 /**
  * leaderboard.linkskool.com/l/{token}: how an organization's staff or its
  * branches did on its tasks, one at a time. Both rank the same way: how much
- * of what was assigned was approved, then how much was on time.
+ * of what was assigned was approved, then how many, then how quickly. A
+ * closed month or year shows its final results.
  */
 const route = useRoute();
 const router = useRouter();
@@ -17,13 +18,23 @@ const state = ref<"loading" | "missing" | "ready">("loading");
 
 // What is shown lives in the address, so a shared link opens on the same view.
 const scope = ref<"staff" | "branches">(route.query.by === "branches" ? "branches" : "staff");
-const period = ref<BoardPeriod>((["month", "last_month", "all"] as const).find((p) => p === route.query.period) ?? "month");
+const periods = [
+  { key: "month", label: "This month" },
+  { key: "last_month", label: "Last month" },
+  { key: "year", label: "This year" },
+  { key: "last_year", label: "Last year" },
+  { key: "all", label: "All time" },
+];
+const fromLink = typeof route.query.period === "string" ? route.query.period : "";
+const period = ref<BoardPeriod>(
+  periods.some((p) => p.key === fromLink) || /^20\d{2}(-(0[1-9]|1[0-2]))?$/.test(fromLink) ? fromLink : "month",
+);
 const task = ref(typeof route.query.task === "string" ? route.query.task : "");
 /** The period's tasks stay pickable while one of them is chosen. */
 const taskOptions = ref<PublicBoard["tasks"]>([]);
 
 const rows = computed<BoardRow[]>(() => (scope.value === "staff" ? (board.value?.staff ?? []) : (board.value?.branches ?? [])));
-const podium = computed(() => rows.value.filter((r) => r.rank <= 3 && r.approved > 0).slice(0, 3));
+const podium = computed(() => rows.value.filter((r) => r.rank !== null && r.rank <= 3 && r.approved > 0).slice(0, 3));
 const rest = computed(() => rows.value.filter((r) => !podium.value.includes(r)));
 // A long board: find yourself by name, or page down 50 at a time.
 const PAGE = 50;
@@ -52,6 +63,8 @@ const tasksSummary = computed(() => {
 
 const medal = (rank: number) => ["🥇", "🥈", "🥉"][rank - 1] ?? String(rank);
 const sub = (r: BoardRow) => (scope.value === "staff" ? (r.branch ?? "") : `${r.staff} ${r.staff === 1 ? "person" : "people"}`);
+const turnaround = (hours: number | null) =>
+  hours === null ? "" : hours < 1 ? "under 1h avg." : hours < 48 ? `${Math.round(hours)}h avg.` : `${(hours / 24).toFixed(1)} days avg.`;
 const barTone = (rate: number) => (rate >= 80 ? "bg-emerald-500" : rate >= 40 ? "bg-brand" : "bg-amber-500");
 
 const load = async () => {
@@ -122,9 +135,10 @@ onUnmounted(remove);
           </div>
           <div class="mt-3 flex flex-wrap justify-center gap-2">
             <select v-model="period" class="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-sm" aria-label="Period">
-              <option value="month">This month</option>
-              <option value="last_month">Last month</option>
-              <option value="all">All time</option>
+              <option v-for="p in periods" :key="p.key" :value="p.key">{{ p.label }}</option>
+              <optgroup v-if="board.results.length" label="Final results">
+                <option v-for="r in board.results" :key="r.key" :value="r.key">{{ r.label }}</option>
+              </optgroup>
             </select>
             <select
               v-if="taskOptions.length > 1"
@@ -136,6 +150,11 @@ onUnmounted(remove);
               <option v-for="t in taskOptions" :key="t.token" :value="t.token">{{ t.title }}</option>
             </select>
           </div>
+          <p v-if="board.periodKey && !task" class="mt-3 text-xs font-medium" :class="board.closed ? 'text-emerald-700' : 'text-slate-500'">
+            <template v-if="board.closed">🏆 Final results for {{ board.periodLabel }}</template>
+            <template v-else-if="board.ended">{{ board.periodLabel }} is over · winners announced soon</template>
+            <template v-else>Live · updates as tasks are approved</template>
+          </p>
         </header>
 
         <p v-if="!board.tasks.length" class="rounded-lg bg-white px-4 py-10 text-center text-sm text-slate-500">
@@ -151,8 +170,8 @@ onUnmounted(remove);
               class="rounded-2xl bg-white px-2 pb-4 text-center shadow-sm ring-1"
               :class="r.rank === 1 ? 'pt-6 ring-amber-300' : 'pt-4 ring-slate-200'"
             >
-              <span class="block text-3xl sm:text-4xl" aria-hidden="true">{{ medal(r.rank) }}</span>
-              <span class="mt-2 block truncate text-sm font-semibold text-slate-900">{{ r.name }}</span>
+              <span class="block text-3xl sm:text-4xl" aria-hidden="true">{{ medal(r.rank ?? 0) }}</span>
+              <span class="mt-2 block truncate text-sm font-semibold text-slate-900">{{ r.name }}<template v-if="r.rewarded"> 🏆</template></span>
               <span class="block min-h-4 truncate text-xs text-slate-500">{{ sub(r) }}</span>
               <span class="mt-2 block font-display text-2xl font-bold text-slate-900">{{ r.rate }}%</span>
               <span class="block text-xs text-slate-500">{{ r.approved }}/{{ r.assigned }} done</span>
@@ -172,11 +191,18 @@ onUnmounted(remove);
             </div>
             <p v-if="!matches.length" class="px-4 py-6 text-center text-sm text-slate-500">No one matches “{{ q }}”.</p>
             <ol class="divide-y divide-slate-100">
-              <li v-for="r in visible" :key="`${scope}-${r.rank}-${r.name}`" class="flex items-center gap-3 px-4 py-3">
-                <span class="w-7 text-center text-sm font-semibold text-slate-500">{{ r.rank }}</span>
+              <li
+                v-for="r in visible"
+                :key="`${scope}-${r.rank}-${r.name}`"
+                class="flex items-center gap-3 px-4 py-3"
+                :class="{ 'opacity-60': !r.eligible }"
+              >
+                <span class="w-7 text-center text-sm font-semibold text-slate-500">{{ r.rank ?? "—" }}</span>
                 <span class="min-w-0 flex-1">
-                  <span class="block truncate text-slate-800">{{ r.name }}</span>
-                  <span v-if="sub(r)" class="block truncate text-xs text-slate-500">{{ sub(r) }}</span>
+                  <span class="block truncate text-slate-800">{{ r.name }}<template v-if="r.rewarded"> 🏆</template></span>
+                  <span class="block truncate text-xs text-slate-500">
+                    {{ [sub(r), r.eligible ? turnaround(r.avgHours) : "not ranked: too few tasks"].filter(Boolean).join(" · ") }}
+                  </span>
                 </span>
                 <span class="hidden h-2 w-24 overflow-hidden rounded-full bg-slate-100 sm:block">
                   <span class="block h-full rounded-full" :class="barTone(r.rate)" :style="{ width: `${r.rate}%` }"></span>
@@ -207,7 +233,10 @@ onUnmounted(remove);
             </ul>
           </details>
           <p class="text-center text-xs text-slate-500">
-            Ranked by how much of what was assigned was approved, then how much was on time.
+            Ranked by how much of what was assigned was approved, then how many, then how quickly.
+            <template v-if="board.periodKey && !task">
+              Tasks count in the month they are due<template v-if="board.minAssigned > 1">, and staff need at least {{ board.minAssigned }} to be ranked</template>.
+            </template>
           </p>
         </template>
       </template>

@@ -1,15 +1,25 @@
 import { apiRequest } from "../client";
 
-export type BoardPeriod = "month" | "last_month" | "all";
+/** A named period, or a closed one by its key: "2026-10" for a month, "2026" for a year. */
+export type BoardPeriod = "month" | "last_month" | "year" | "last_year" | "all" | (string & {});
 
-/** Staff and branches rank alike: rate (approved of assigned), then on time, then approved. */
+/**
+ * Staff and branches rank alike: rate (approved of assigned), then approved,
+ * then the quicker average turnaround. Over a period, staff given under half
+ * as many tasks as the most anyone was given are listed but not ranked.
+ */
 export interface BoardRow {
     name: string;
     assigned: number;
     approved: number;
-    onTime: number;
     rate: number;
-    rank: number;
+    /** Average hours from a task going out to its approved answer. */
+    avgHours: number | null;
+    eligible: boolean;
+    /** Null when not ranked. */
+    rank: number | null;
+    /** Rewarded from this period. */
+    rewarded?: boolean;
     /** Staff: their branch. */
     branch?: string | null;
     /** A branch: how many people. */
@@ -21,7 +31,14 @@ export interface PublicBoard {
     logoUrl: string | null;
     /** "task" when it ranks one task alone. */
     period: BoardPeriod | "task";
+    periodKey: string | null;
     periodLabel: string;
+    ended: boolean;
+    /** Set once the period is closed: these are then its final results. */
+    closed: { at: string } | null;
+    /** Closed periods, newest first. */
+    results: { key: string; label: string }[];
+    minAssigned: number;
     tasks: { token: string; title: string; deadline: string | null; assigned: number; done: number }[];
     branches: BoardRow[];
     staff: BoardRow[];
