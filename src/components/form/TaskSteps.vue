@@ -155,9 +155,35 @@ const copyPost = async (step: ShareStep, i: number) => {
   if (!text) return;
   try {
     await navigator.clipboard.writeText(text);
-    flash(image ? "Caption copied. Your browser can’t copy the picture, so attach it yourself." : "Copied. Paste it where you’re posting.");
+    flash(
+      image
+        ? "Caption copied. Your browser can’t copy the picture, so save it below and attach it."
+        : step.files.length
+          ? "Caption copied. Save the file below and add it to your post."
+          : "Copied. Paste it where you’re posting.",
+    );
   } catch {
     note.value = { ...note.value, [i]: "Copying isn’t allowed here. Select the caption and copy it." };
+  }
+};
+
+/**
+ * On an iPhone a download lands in Files, where WhatsApp's picker doesn't look,
+ * so the file goes through the share sheet instead: its Save Video and Save
+ * Image put it in Photos. Elsewhere the link downloads as usual.
+ */
+const isIos =
+  typeof navigator !== "undefined" &&
+  (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+
+const save = async (e: MouseEvent, i: number, n: number) => {
+  const file = ready.value[i]?.[n];
+  if (!isIos || !file || !navigator.canShare?.({ files: [file] })) return;
+  e.preventDefault();
+  try {
+    await navigator.share({ files: [file] });
+  } catch (err) {
+    if ((err as Error).name !== "AbortError") window.location.href = (e.currentTarget as HTMLAnchorElement).href;
   }
 };
 
@@ -256,19 +282,28 @@ const host = (url: string) => {
                 </a>
               </div>
             </div>
-            <!-- A platform link carries only text; without the share sheet, files are attached by hand. -->
-            <p v-if="step.files.length && !ready[i]" class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-              <span>Attach with your post:</span>
-              <a
-                v-for="f in step.files"
-                :key="f.file"
-                :href="f.url"
-                :download="f.name"
-                class="font-medium text-brand hover:underline"
-              >
-                <i class="fa-solid fa-download mr-0.5" aria-hidden="true"></i>{{ f.name }} ({{ formatSize(f.size) }})
-              </a>
-            </p>
+            <!--
+              Saved to the phone, for what neither share nor copy reaches: a WhatsApp
+              broadcast list, or a video, which no browser puts on the clipboard.
+            -->
+            <div v-if="step.files.length" class="space-y-1">
+              <p class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                <span>Save to your {{ isIos || canShare ? "phone" : "computer" }}:</span>
+                <a
+                  v-for="(f, n) in step.files"
+                  :key="f.file"
+                  :href="f.url"
+                  :download="f.name"
+                  class="font-medium text-brand hover:underline"
+                  @click="save($event, i, n)"
+                >
+                  <i class="fa-solid fa-download mr-0.5" aria-hidden="true"></i>{{ f.name }} ({{ formatSize(f.size) }})
+                </a>
+              </p>
+              <p v-if="canShare" class="text-xs text-slate-400">
+                For a broadcast list: save the files, tap Copy for the caption, then send both from WhatsApp.
+              </p>
+            </div>
           </template>
 
           <a
