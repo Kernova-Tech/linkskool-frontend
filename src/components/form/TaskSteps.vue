@@ -77,6 +77,90 @@ const share = async (step: ShareStep, i: number) => {
   }
 };
 
+/**
+ * Puts the caption and the step's first picture on the clipboard together:
+ * the picture as PNG (the one image type every browser copies), the caption as
+ * text, and both as HTML for apps that paste rich content. Each app pastes
+ * what it understands. Without picture support it falls back to the caption.
+ */
+const canCopy = typeof navigator !== "undefined" && !!navigator.clipboard;
+const copied = ref<number | null>(null);
+
+const asPng = async (blob: Blob): Promise<Blob> => {
+  if (blob.type === "image/png") return blob;
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("No image"))), "image/png"),
+  );
+};
+
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+const copyPost = async (step: ShareStep, i: number) => {
+  const text = step.text ?? "";
+  const image = step.files.find((f) => f.type.startsWith("image/"));
+  const flash = (message: string) => {
+    note.value = { ...note.value, [i]: message };
+    copied.value = i;
+    setTimeout(() => {
+      if (copied.value === i) copied.value = null;
+    }, 2500);
+  };
+
+  if (image && typeof ClipboardItem !== "undefined") {
+    // Started on the tap itself: Safari only allows the write while the tap is fresh,
+    // so the item takes promises that finish once the picture is in.
+    const png = fetch(image.url)
+      .then((r) => r.blob())
+      .then(asPng);
+    const html = png.then(
+      (b) =>
+        new Promise<Blob>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () =>
+            resolve(
+              new Blob(
+                [
+                  `<img src="${reader.result}" alt="${escapeHtml(image.name)}">` +
+                    text
+                      .split("\n")
+                      .map((line) => `<p>${escapeHtml(line) || "<br>"}</p>`)
+                      .join(""),
+                ],
+                { type: "text/html" },
+              ),
+            );
+          reader.readAsDataURL(b);
+        }),
+    );
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "image/png": png,
+          ...(text ? { "text/plain": new Blob([text], { type: "text/plain" }), "text/html": html } : {}),
+        }),
+      ]);
+      flash(step.files.length > 1 ? "Copied with the first picture. Paste it where you’re posting." : "Copied. Paste it where you’re posting.");
+      return;
+    } catch {
+      // Some browsers take only text; the caption still goes.
+    }
+  }
+
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    flash(image ? "Caption copied. Your browser can’t copy the picture, so attach it yourself." : "Copied. Paste it where you’re posting.");
+  } catch {
+    note.value = { ...note.value, [i]: "Copying isn’t allowed here. Select the caption and copy it." };
+  }
+};
+
 const host = (url: string) => {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -133,14 +217,25 @@ const host = (url: string) => {
               <p v-if="step.text" class="line-clamp-4 whitespace-pre-line px-3 py-2 text-sm text-slate-700">{{ step.text }}</p>
             </div>
 
-            <button
-              v-if="canShare"
-              type="button"
-              class="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 font-medium text-white hover:bg-brand-ink sm:w-auto"
-              @click="share(step, i)"
-            >
-              <i class="fa-solid fa-share-nodes" aria-hidden="true"></i> Share
-            </button>
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <button
+                v-if="canShare"
+                type="button"
+                class="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 font-medium text-white hover:bg-brand-ink sm:w-auto"
+                @click="share(step, i)"
+              >
+                <i class="fa-solid fa-share-nodes" aria-hidden="true"></i> Share
+              </button>
+              <button
+                v-if="canCopy && (step.text || step.files.some((f) => f.type.startsWith('image/')))"
+                type="button"
+                class="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 font-medium text-brand ring-1 ring-slate-300 hover:bg-slate-50 sm:w-auto"
+                @click="copyPost(step, i)"
+              >
+                <i class="fa-solid" :class="copied === i ? 'fa-check' : 'fa-copy'" aria-hidden="true"></i>
+                {{ copied === i ? "Copied" : "Copy" }}
+              </button>
+            </div>
             <p v-if="note[i]" class="text-xs text-slate-500">{{ note[i] }}</p>
 
             <div v-if="step.shareLinks.length" class="space-y-1.5">
