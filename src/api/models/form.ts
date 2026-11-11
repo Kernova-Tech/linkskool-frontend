@@ -33,7 +33,7 @@ export interface FormNextAction {
   auto: boolean
 }
 
-export type SharePlatform = 'whatsapp' | 'x' | 'facebook' | 'linkedin' | 'telegram'
+export type SharePlatform = 'whatsapp' | 'x' | 'facebook' | 'instagram' | 'linkedin' | 'telegram'
 
 /** A post to send out in one tap: the caption and link as one text, and files to attach. */
 export interface ShareStep {

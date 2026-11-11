@@ -16,6 +16,7 @@ const PLATFORMS: Record<SharePlatform, { name: string; icon: string; color: stri
   x: { name: "X", icon: "fa-x-twitter", color: "bg-black" },
   facebook: { name: "Facebook", icon: "fa-facebook-f", color: "bg-[#1877F2]" },
   linkedin: { name: "LinkedIn", icon: "fa-linkedin-in", color: "bg-[#0A66C2]" },
+  instagram: { name: "Instagram", icon: "fa-instagram", color: "bg-[#E1306C]" },
   telegram: { name: "Telegram", icon: "fa-telegram", color: "bg-[#229ED9]" },
 };
 
@@ -38,27 +39,106 @@ const markDone = (i: number) => {
   }
 };
 
-/** The share sheet must open on the tap itself, so files are fetched ahead of it. */
+/**
+ * The share sheet must open on the tap itself, so files are fetched ahead of
+ * it. Until they are in, Share waits and shows how far along they are, so a
+ * tap never sends the caption without the video. If they can't come, Share
+ * says it sends the caption only.
+ */
 const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
 const ready = ref<Record<number, File[]>>({});
+const loading = ref<Record<number, number>>({});
+const failed = ref<Record<number, "error" | "unsupported">>({});
+
+/** What the step's files are, as the person would call them. */
+const what = (step: ShareStep) =>
+  step.files.some((f) => f.type.startsWith("video/"))
+    ? "video"
+    : step.files.length === 1 && step.files[0]!.type.startsWith("image/")
+      ? "picture"
+      : "files";
+
+/** A file by its type: "video", "picture", "PDF"; numbered when the step has more than one of that type. */
+const kindOf = (f: ShareStep["files"][number]) => {
+  const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+  if (f.type.startsWith("video/")) return "video";
+  if (f.type.startsWith("image/")) return "picture";
+  if (f.type.startsWith("audio/")) return "audio";
+  if (ext === "pdf") return "PDF";
+  if (["doc", "docx"].includes(ext)) return "document";
+  if (["ppt", "pptx"].includes(ext)) return "slides";
+  if (["xls", "xlsx", "csv"].includes(ext)) return "spreadsheet";
+  return "file";
+};
+const fileLabel = (step: ShareStep, n: number) => {
+  const kind = kindOf(step.files[n]!);
+  const same = step.files.filter((f) => kindOf(f) === kind);
+  return same.length > 1 ? `${kind} ${same.indexOf(step.files[n]!) + 1}` : kind;
+};
+
+/** Fetches a file, telling how many bytes have come so far. */
+const download = async (url: string, onBytes: (n: number) => void): Promise<Blob> => {
+  const res = await fetch(url);
+  if (!res.ok || !res.body) throw new Error(`Download failed (${res.status})`);
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    onBytes(value.length);
+  }
+  return new Blob(chunks as BlobPart[]);
+};
+
 onMounted(() => {
   if (!canShare) return;
   props.steps.forEach(async (step, i) => {
     if (step.kind !== "share" || !step.files.length) return;
+    const total = step.files.reduce((sum, f) => sum + f.size, 0) || 1;
+    let got = 0;
+    loading.value = { ...loading.value, [i]: 0 };
     try {
       const files = await Promise.all(
-        step.files.map(async (f) => new File([await (await fetch(f.url)).blob()], f.name, { type: f.type })),
+        step.files.map(
+          async (f) =>
+            new File(
+              [
+                await download(f.url, (n) => {
+                  got += n;
+                  loading.value = { ...loading.value, [i]: Math.min(99, Math.floor((got / total) * 100)) };
+                }),
+              ],
+              f.name,
+              { type: f.type },
+            ),
+        ),
       );
       if (navigator.canShare?.({ files })) ready.value = { ...ready.value, [i]: files };
+      else failed.value = { ...failed.value, [i]: "unsupported" };
     } catch {
-      // Shared without the files; they can still download them.
+      failed.value = { ...failed.value, [i]: "error" };
+    } finally {
+      const rest = { ...loading.value };
+      delete rest[i];
+      loading.value = rest;
     }
   });
 });
 
 const note = ref<Record<number, string>>({});
 const share = async (step: ShareStep, i: number) => {
+  if (loading.value[i] !== undefined) return;
   const files = ready.value[i];
+  if (step.files.length && !files?.length) {
+    note.value = {
+      ...note.value,
+      [i]:
+        failed.value[i] === "unsupported"
+          ? `This browser can’t share the ${what(step)}, so only the caption goes. Save the ${what(step)} below and attach it.`
+          : `The ${what(step)} didn’t load, so only the caption goes. Save it below and attach it, or reload the page to try again.`,
+    };
+  }
   // Some apps keep only the picture, so the caption is on the clipboard to paste.
   if (files?.length && step.text) {
     try {
@@ -187,6 +267,31 @@ const save = async (e: MouseEvent, i: number, n: number) => {
   }
 };
 
+/**
+ * Instagram takes no caption from a link and drops shared text, so the caption
+ * goes on the clipboard first. With the files in, the share sheet carries them
+ * alone (Instagram shows up for pictures and videos); otherwise Instagram
+ * opens and the person pastes.
+ */
+const instagram = (e: MouseEvent, step: ShareStep, i: number) => {
+  markDone(i);
+  const files = ready.value[i];
+  const paste = step.text ? "Caption copied. Paste it into your Instagram post." : "";
+  if (step.text) navigator.clipboard?.writeText(step.text).catch(() => {});
+  if (!files?.length) {
+    note.value = {
+      ...note.value,
+      [i]: step.files.length ? `${paste} Save the ${what(step)} below and add it to the post.`.trim() : paste,
+    };
+    return; // The link opens Instagram.
+  }
+  e.preventDefault();
+  note.value = { ...note.value, [i]: `Pick Instagram in the list. ${paste}`.trim() };
+  navigator.share({ files }).catch((err: Error) => {
+    if (err.name !== "AbortError") window.open("https://www.instagram.com/", "_blank", "noopener");
+  });
+};
+
 const host = (url: string) => {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -247,10 +352,18 @@ const host = (url: string) => {
               <button
                 v-if="canShare"
                 type="button"
-                class="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 font-medium text-white hover:bg-brand-ink sm:w-auto"
+                class="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 font-medium text-white hover:bg-brand-ink disabled:cursor-wait disabled:opacity-70 sm:w-auto"
+                :disabled="loading[i] !== undefined"
                 @click="share(step, i)"
               >
-                <i class="fa-solid fa-share-nodes" aria-hidden="true"></i> Share
+                <template v-if="loading[i] !== undefined">
+                  <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                  Getting the {{ what(step) }} ready… {{ loading[i] }}%
+                </template>
+                <template v-else>
+                  <i class="fa-solid fa-share-nodes" aria-hidden="true"></i>
+                  {{ failed[i] ? "Share caption only" : "Share" }}
+                </template>
               </button>
               <button
                 v-if="canCopy && (step.text || step.files.some((f) => f.type.startsWith('image/')))"
@@ -265,7 +378,11 @@ const host = (url: string) => {
             <p v-if="note[i]" class="text-xs text-slate-500">{{ note[i] }}</p>
 
             <div v-if="step.shareLinks.length" class="space-y-1.5">
-              <p v-if="canShare" class="text-xs text-slate-500">Or post straight to</p>
+              <p v-if="canShare || step.files.length" class="text-xs text-slate-500">
+                Or post straight to<template v-if="step.files.length">
+                  (these send the caption only; add the {{ what(step) }} yourself)</template
+                >
+              </p>
               <div class="flex flex-wrap gap-2">
                 <a
                   v-for="l in step.shareLinks"
@@ -275,7 +392,7 @@ const host = (url: string) => {
                   rel="noopener"
                   class="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium text-white hover:opacity-90"
                   :class="PLATFORMS[l.platform].color"
-                  @click="markDone(i)"
+                  @click="l.platform === 'instagram' ? instagram($event, step, i) : markDone(i)"
                 >
                   <i class="fa-brands" :class="PLATFORMS[l.platform].icon" aria-hidden="true"></i>
                   {{ PLATFORMS[l.platform].name }}
@@ -286,20 +403,23 @@ const host = (url: string) => {
               Saved to the phone, for what neither share nor copy reaches: a WhatsApp
               broadcast list, or a video, which no browser puts on the clipboard.
             -->
-            <div v-if="step.files.length" class="space-y-1">
-              <p class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-                <span>Save to your {{ isIos || canShare ? "phone" : "computer" }}:</span>
+            <div v-if="step.files.length" class="space-y-1.5">
+              <p class="text-xs text-slate-500">Save to your {{ isIos || canShare ? "phone" : "computer" }}:</p>
+              <div class="flex flex-wrap gap-2">
                 <a
                   v-for="(f, n) in step.files"
                   :key="f.file"
                   :href="f.url"
                   :download="f.name"
-                  class="font-medium text-brand hover:underline"
+                  :title="f.name"
+                  class="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-brand ring-1 ring-slate-300 hover:bg-slate-50"
                   @click="save($event, i, n)"
                 >
-                  <i class="fa-solid fa-download mr-0.5" aria-hidden="true"></i>{{ f.name }} ({{ formatSize(f.size) }})
+                  <i class="fa-solid fa-download" aria-hidden="true"></i>
+                  Download {{ fileLabel(step, n) }}
+                  <span class="text-xs font-normal text-slate-400">{{ formatSize(f.size) }}</span>
                 </a>
-              </p>
+              </div>
               <p v-if="canShare" class="text-xs text-slate-400">
                 For a broadcast list: save the files, tap Copy for the caption, then send both from WhatsApp.
               </p>
