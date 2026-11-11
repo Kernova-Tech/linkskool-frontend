@@ -137,6 +137,12 @@ const router = createRouter({
       component: () => import('@/views/leaderboard/DonePage.vue'),
     },
     {
+      // Where a certificate's QR code leads, to check it is genuine.
+      path: '/certificates/:code([A-Za-z0-9]{2}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4})',
+      name: 'certificate-check',
+      component: () => import('@/views/CertificateCheckPage.vue'),
+    },
+    {
       // Every task a staff member is on, across their organizations.
       path: '/tasks',
       name: 'my-tasks',
