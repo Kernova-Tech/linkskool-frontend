@@ -139,11 +139,14 @@ const share = async (step: ShareStep, i: number) => {
           : `The ${what(step)} didn’t load, so only the caption goes. Save it below and attach it, or reload the page to try again.`,
     };
   }
-  // Some apps keep only the picture, so the caption is on the clipboard to paste.
+  // Instagram, and Facebook on iPhone, keep only the files, so the caption is on the clipboard to paste.
   if (files?.length && step.text) {
     try {
       await navigator.clipboard.writeText(step.text);
-      note.value = { ...note.value, [i]: "Caption copied. Paste it if the app leaves it out." };
+      note.value = {
+        ...note.value,
+        [i]: `Caption copied. If the caption isn’t there (${isIos ? "Facebook, Instagram" : "Instagram"}), press and hold in the post box and tap Paste.`,
+      };
     } catch {
       // The share carries it.
     }
@@ -376,6 +379,16 @@ const host = (url: string) => {
               </button>
             </div>
             <p v-if="note[i]" class="text-xs text-slate-500">{{ note[i] }}</p>
+            <p
+              v-else-if="canShare && step.text && step.files.length && !failed[i]"
+              class="flex gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200"
+            >
+              <i class="fa-solid fa-circle-info mt-0.5" aria-hidden="true"></i>
+              <span>
+                {{ isIos ? "On iPhone, Facebook and Instagram post" : "Instagram posts" }} the {{ what(step) }} without the
+                caption. Share copies it for you, so paste it into the post there.
+              </span>
+            </p>
 
             <div v-if="step.shareLinks.length" class="space-y-1.5">
               <p v-if="canShare || step.files.length" class="text-xs text-slate-500">
