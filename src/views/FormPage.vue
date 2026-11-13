@@ -29,6 +29,8 @@ const errors = reactive<Record<string, string>>({});
 const submitError = ref("");
 const sentMessage = ref("");
 const sending = ref(false);
+/** How much of the attached files has gone up, while they go; null before or without files. */
+const uploadPercent = ref<number | null>(null);
 const confirmingClear = ref(false);
 const nextAction = ref<FormNextAction | null>(null);
 
@@ -219,6 +221,7 @@ const submit = async () => {
       website.value,
       attached,
       form.value.requireSignIn ? session.value?.accessToken : undefined,
+      (percent) => (uploadPercent.value = percent),
     );
     sentMessage.value = result.message;
     nextAction.value = result.nextAction ?? null;
@@ -243,11 +246,14 @@ const submit = async () => {
         ? "Too many attempts. Please wait a few minutes and try again."
         : e instanceof ApiError && e.status === 413
           ? "Your files are too large to send together. Try smaller files."
+          : !(e instanceof ApiError)
+            ? "The connection dropped while sending. Check it and press Submit again; files that already went up will not be sent again."
           : e instanceof Error && e.message
             ? e.message
             : "Your response could not be sent. Please try again.";
   } finally {
     sending.value = false;
+    uploadPercent.value = null;
   }
 };
 
@@ -649,7 +655,13 @@ onUnmounted(() => {
               class="inline-flex cursor-pointer items-center gap-2 rounded-md bg-brand px-6 py-2.5 font-medium text-white shadow-sm transition hover:bg-brand-ink disabled:cursor-wait disabled:opacity-70"
             >
               <i v-if="sending" class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
-              {{ sending ? "Sending…" : "Submit" }}
+              {{
+                !sending
+                  ? "Submit"
+                  : uploadPercent !== null && uploadPercent < 100
+                    ? `Uploading files… ${uploadPercent}%`
+                    : "Sending…"
+              }}
             </button>
             <span v-if="confirmingClear" class="flex items-center gap-3 text-sm">
               <span class="text-slate-600">Clear all answers?</span>

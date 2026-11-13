@@ -108,6 +108,7 @@ export async function apiRequest<T = unknown>(
         message:
             (payload?.['message'] as string | undefined) ??
             (response.ok ? undefined : response.statusText),
+        code: typeof payload?.['code'] === 'string' ? (payload['code'] as string) : undefined,
         data: toCamel(payload?.['data'] ?? parsed ?? null) as T,
     };
 
